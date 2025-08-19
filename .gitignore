@@ -4,6 +4,7 @@
 # Python cache
 __pycache__/
 *.pyc
+.DS_Store
 
 # Virtual environments
 venv/
@@ -15,9 +16,16 @@ data/raw/
 *.zip
 *.tar
 *.tar.gz
+*.sqlite3
 
 # Database
 data/*.sqlite3
+
+#Models
+*.pt
+*.pth
+*.onnx
+
 
 # Large media (optional, if not needed in repo)
 *.jpg
