@@ -1,4 +1,5 @@
 from ultralytics import YOLO
+import os
 
 # Lista de objetos relevantes (Whitelist)
 OBJECTS_OF_INTEREST = ["bottle", "cup", "fork", "spoon", "knife", "book", "laptop", "cell phone", "remote", "plant"]
