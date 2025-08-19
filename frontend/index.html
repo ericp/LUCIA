@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LUCIA Object Detection</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 2rem; }
+        button { padding: 1rem 2rem; font-size: 1.2rem; border-radius: 10px; }
+        #status { margin-top: 2rem; font-size: 1.5rem; }
+        #correctionSection { margin-top: 2rem; display: none; }
+    </style>
+</head>
+<body>
+    <h1>L.U.C.I.A.</h1>
+    <p>Object Detection Assistant</p>
+
+    <input type="file" accept="image/*" capture="environment" id="imageInput">
+    <button id="detectBtn">Detect Object</button>
+    <div id="status"></div>
+
+    <div id="correctionSection">
+        <h3>¿Etiqueta incorrecta?</h3>
+        <input type="text" id="newLabel" placeholder="Introduce etiqueta correcta">
+        <button id="correctBtn">Enviar corrección</button>
+    </div>
+
+    <script>
+        let currentDetectionId = null;
+    
+        // 📌 1. Función para consultar el estado de entrenamiento
+        function checkTrainingStatus() {
+            const interval = setInterval(async () => {
+                try {
+                    const res = await fetch('http://192.168.1.134:8000/training-status');
+                    const data = await res.json();
+    
+                    if (data.status === "training_completed") {
+                        document.getElementById('status').innerText = "✅ Entrenamiento completado. Nuevo modelo en uso.";
+                        clearInterval(interval);
+                    } else if (data.status === "training_started") {
+                        document.getElementById('status').innerText = "⏳ Entrenando modelo...";
+                    } else if (data.status === "training_failed") {
+                        document.getElementById('status').innerText = "❌ Falló el entrenamiento. Revisa logs.";
+                        clearInterval(interval);
+                    }
+                } catch (err) {
+                    console.error("Error consultando estado de entrenamiento:", err);
+                    clearInterval(interval);
+                }
+            }, 5000); // cada 5s
+        }
+    
+        // 📌 2. Botón para detectar objeto
+        document.getElementById('detectBtn').addEventListener('click', async () => {
+            const input = document.getElementById('imageInput');
+            if (input.files.length === 0) {
+                alert('Please take a photo first.');
+                return;
+            }
+    
+            const formData = new FormData();
+            formData.append('file', input.files[0]);
+    
+            document.getElementById('status').innerText = 'Detecting...';
+    
+            try {
+                const response = await fetch('http://192.168.1.134:8000/detect', {
+                    method: 'POST',
+                    body: formData
+                });
+    
+                const data = await response.json();
+    
+                if (data.object_detected) {
+                    document.getElementById('status').innerText =
+                        `ID: ${data.id} - Detected: ${data.object_detected} (${(data.confidence * 100).toFixed(1)}%)`;
+                    currentDetectionId = data.id;
+                    document.getElementById('correctionSection').style.display = 'block';
+                } else {
+                    document.getElementById('status').innerText = data.message;
+                    currentDetectionId = null;
+                    document.getElementById('correctionSection').style.display = 'none';
+                }
+            } catch (error) {
+                document.getElementById('status').innerText = 'Error connecting to API';
+            }
+        });
+    
+        // 📌 3. Botón para enviar corrección
+        document.getElementById('correctBtn').addEventListener('click', async () => {
+            if (!currentDetectionId) {
+                alert('No hay detección para corregir.');
+                return;
+            }
+    
+            const newLabel = document.getElementById('newLabel').value.trim();
+            if (!newLabel) {
+                alert('Por favor, introduce la etiqueta correcta.');
+                return;
+            }
+    
+            const formData = new FormData();
+            formData.append('id', currentDetectionId);
+            formData.append('new_label', newLabel);
+    
+            try {
+                const response = await fetch('http://192.168.1.134:8000/correct', {
+                    method: 'POST',
+                    body: formData
+                });
+    
+                const result = await response.json();
+                if (result.status === "updated") {
+                    alert(`Etiqueta actualizada a: ${newLabel}`);
+                    document.getElementById('status').innerText =
+                        `ID: ${currentDetectionId} - Updated label: ${newLabel}`;
+    
+                    // 🔄 Inicia verificación de estado de entrenamiento
+                    checkTrainingStatus();
+                } else {
+                    alert('No se encontró la detección para actualizar.');
+                }
+            } catch (error) {
+                alert('Error al enviar la corrección.');
+            }
+        });
+    </script>    
+</body>
+</html>

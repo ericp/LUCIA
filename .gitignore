@@ -1,0 +1,26 @@
+# macOS system files
+.DS_Store
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environments
+venv/
+.env/
+.micromamba/
+
+# Datasets and raw files
+data/raw/
+*.zip
+*.tar
+*.tar.gz
+
+# Database
+data/*.sqlite3
+
+# Large media (optional, if not needed in repo)
+*.jpg
+*.jpeg
+*.png
+*.mp4
