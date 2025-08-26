@@ -1,8 +1,8 @@
 # LUCIA src.app:app --reload
 from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
-
+from fastapi.staticfiles import StaticFiles
 import cv2
 import numpy as np
 import os
@@ -17,16 +17,27 @@ from src.database import SessionLocal, Detection, UserLabel
 
 app = FastAPI()
 
+# --- Servir frontend estático en /web (NO en "/") ---
+if os.path.isdir("frontend"):
+    app.mount("/web", StaticFiles(directory="frontend", html=True), name="frontend")
+
+
+@app.get("/")
+def root():
+    return RedirectResponse(url="/web/")
+
+
 # -----------------------
 # CORS (para permitir llamadas desde el iPhone/otro host)
 # -----------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],      # si quieres restringir, pon la IP del iPhone o '*'
+    allow_origins=["*"],  # si quieres restringir, pon la IP del iPhone o un dominio concreto
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # -----------------------
 # Paths
@@ -37,6 +48,7 @@ STATUS_FILE = "training_status.txt"
 
 os.makedirs(IMAGES_DIR, exist_ok=True)
 os.makedirs(CORRECTED_IMAGES_DIR, exist_ok=True)
+
 
 # -----------------------
 # Helpers
@@ -82,27 +94,63 @@ async def detect_object(file: UploadFile = File(...)):
         except Exception:
             pass
 
-        return JSONResponse(content={
-            "id": detection_id,
-            "object_detected": label,
-            "confidence": confidence,
-            "message": f"Object detected: {label} ({confidence:.2f})",
-            "hints": hints
-        })
-
+        return JSONResponse(
+            content={
+                "id": detection_id,
+                "object_detected": label,
+                "confidence": confidence,
+                "message": f"Object detected: {label} ({confidence:.2f})",
+                "hints": hints,
+            }
+        )
     else:
         try:
             speak("No relevant object detected")
         except Exception:
             pass
 
-        return JSONResponse(content={
-            "id": None,
-            "object_detected": None,
-            "confidence": None,
-            "message": "No relevant object detected.",
-            "hints": hints
-        })
+        return JSONResponse(
+            content={
+                "id": None,
+                "object_detected": None,
+                "confidence": None,
+                "message": "No relevant object detected.",
+                "hints": hints,
+            }
+        )
+
+
+# -----------------------
+# POST /guide
+# -----------------------
+@app.post("/guide")
+async def guide_object(file: UploadFile = File(...)):
+    """
+    Recibe un frame (foto ligera) y devuelve solo hints para guiar al usuario
+    antes de tomar la foto buena. No guarda en BD ni hace TTS.
+    """
+    contents = await file.read()
+    npimg = np.frombuffer(contents, np.uint8)
+    frame = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+
+    label, confidence, hints = detect_objects_in_frame(frame)
+
+    # Señal de “listo para capturar” cuando todo está OK
+    ready = bool(
+        hints
+        and hints.get("distance") == "ok"
+        and hints.get("center") == "centered"
+        and hints.get("light") == "ok_light"
+    )
+
+    return JSONResponse(
+        content={
+            "object_detected": label,
+            "confidence": confidence,
+            "hints": hints,
+            "ready": ready,
+        }
+    )
 
 
 # -----------------------
@@ -110,7 +158,7 @@ async def detect_object(file: UploadFile = File(...)):
 # -----------------------
 @app.post("/correct")
 async def correct_label(id: int = Form(...), new_label: str = Form(...)):
-    """Recibe corrección de etiqueta, guarda en BD y lanza reentrenamiento en segundo plano."""
+    """Recibe corrección de etiqueta, guarda en BD y (opcional) lanza reentrenamiento en segundo plano."""
     session = SessionLocal()
     detection = session.query(Detection).filter(Detection.id == id).first()
 
@@ -129,20 +177,17 @@ async def correct_label(id: int = Form(...), new_label: str = Form(...)):
 
         session.close()
 
-        # Estado: empezando entrenamiento
+        # (Opcional) Si no vas a entrenar ahora, comenta estas 4 líneas:
         set_status("training_started")
-
-        # Ejecutar entrenamiento en segundo plano
         try:
             subprocess.Popen(
                 ["python", "scripts/update_model.py"],
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
+                stderr=subprocess.DEVNULL,
             )
         except Exception as e:
             print(f"[ERROR] No se pudo lanzar update_model.py: {e}")
 
-        # 🔁 IMPORTANTE: devolver "updated" para que coincida con tu frontend
         return {"status": "updated", "id": id, "new_label": new_label}
 
     session.close()

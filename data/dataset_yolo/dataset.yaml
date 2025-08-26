@@ -1,0 +1,4 @@
+path: /Users/eric/Documents/Masters Degree/M10.-TFM/LUCIA/data/dataset_yolo
+train: images/train
+val: images/val
+names: ['bottle', 'cup', 'fork', 'spoon', 'knife', 'book', 'laptop', 'cell phone', 'remote', 'plant']
