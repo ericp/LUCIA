@@ -1,0 +1,11 @@
+Image Conditions,Accuracy_%,N
+Artificial light,80.0,30
+Normal,80.0,30
+Natural light,73.33333333333333,30
+Diagonaly,70.0,30
+Turned Around,66.66666666666666,30
+Left,60.0,30
+Top,56.666666666666664,30
+Right,53.333333333333336,30
+Upside Down,43.333333333333336,30
+Bottom,40.0,30

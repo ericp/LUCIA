@@ -1,6 +1,8 @@
 # LUCIA src.app:app --reload
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+
 import cv2
 import numpy as np
 import os
@@ -14,6 +16,17 @@ from src.tts import speak
 from src.database import SessionLocal, Detection, UserLabel
 
 app = FastAPI()
+
+# -----------------------
+# CORS (para permitir llamadas desde el iPhone/otro host)
+# -----------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],      # si quieres restringir, pon la IP del iPhone o '*'
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # -----------------------
 # Paths
@@ -33,12 +46,13 @@ def set_status(status: str):
     with open(STATUS_FILE, "w") as f:
         f.write(status)
 
+
 # -----------------------
 # POST /detect
 # -----------------------
 @app.post("/detect")
 async def detect_object(file: UploadFile = File(...)):
-    """Recibe imagen, detecta objeto, guarda en BD y responde al frontend."""
+    """Recibe imagen, detecta objeto, guarda en BD y responde al frontend con hints de guía."""
     contents = await file.read()
 
     # Guardar imagen original
@@ -50,7 +64,8 @@ async def detect_object(file: UploadFile = File(...)):
     npimg = np.frombuffer(contents, np.uint8)
     frame = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
-    label, confidence = detect_objects_in_frame(frame)
+    # NUEVO: detect devuelve (label, confidence, hints)
+    label, confidence, hints = detect_objects_in_frame(frame)
 
     if label:
         # Guardar en BD
@@ -61,23 +76,34 @@ async def detect_object(file: UploadFile = File(...)):
         detection_id = detection.id
         session.close()
 
-        # TTS
-        speak(f"{label} detected")
+        # TTS local en Mac (opcional)
+        try:
+            speak(f"{label} detected")
+        except Exception:
+            pass
 
         return JSONResponse(content={
             "id": detection_id,
             "object_detected": label,
             "confidence": confidence,
-            "message": f"Object detected: {label} ({confidence:.2f})"
+            "message": f"Object detected: {label} ({confidence:.2f})",
+            "hints": hints
         })
+
     else:
-        speak("No relevant object detected")
+        try:
+            speak("No relevant object detected")
+        except Exception:
+            pass
+
         return JSONResponse(content={
             "id": None,
             "object_detected": None,
             "confidence": None,
-            "message": "No relevant object detected."
+            "message": "No relevant object detected.",
+            "hints": hints
         })
+
 
 # -----------------------
 # POST /correct
@@ -116,10 +142,12 @@ async def correct_label(id: int = Form(...), new_label: str = Form(...)):
         except Exception as e:
             print(f"[ERROR] No se pudo lanzar update_model.py: {e}")
 
-        return {"status": "updated_and_training_in_background", "id": id, "new_label": new_label}
+        # 🔁 IMPORTANTE: devolver "updated" para que coincida con tu frontend
+        return {"status": "updated", "id": id, "new_label": new_label}
 
     session.close()
     return {"status": "not found", "id": id}
+
 
 # -----------------------
 # GET /training-status

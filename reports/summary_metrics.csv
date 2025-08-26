@@ -1,0 +1,7 @@
+Metric,Value
+Total rows,300.0
+Detected YES count,187.0
+Overall accuracy (%),62.33
+Average attempts (all),5.057
+Average confidence (all rows),0.776
+Average confidence (detected=YES),0.776
