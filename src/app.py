@@ -205,3 +205,17 @@ async def get_training_status():
             status = f.read().strip()
         return {"status": status}
     return {"status": "unknown"}
+
+
+@app.get("/yolo-selftest")
+def yolo_selftest():
+    try:
+        from ultralytics.utils import ASSETS
+        test_img = os.path.join(ASSETS, 'bus.jpg')
+        from src.detect import model
+        r = model.predict(test_img, imgsz=640, conf=0.01, iou=0.3, device='cpu', verbose=False)
+        n = 0 if r[0].boxes is None else len(r[0].boxes)
+        return {"ok": True, "boxes_on_bus_jpg": int(n)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+

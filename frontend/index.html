@@ -119,21 +119,35 @@
       // ======== SPEECH (con cooldown y dedupe) ========
       let lastSpeakAt = 0;
       let lastSpokenKey = "";
-    
+      let ttsWarmed = false;
+
       function speakPhone(text, key = "") {
         try {
           if (!('speechSynthesis' in window)) return;
           const now = Date.now();
+
+          // cooldown y anti-repetición
           if (key && key === lastSpokenKey && (now - lastSpeakAt) < 1500) return;
-          if ((now - lastSpeakAt) < 1000) return;
-    
-          window.speechSynthesis.cancel(); // “wake up” TTS en iOS
-          const u = new SpeechSynthesisUtterance(text);
-          u.volume = 1.0;
-          u.rate = 1.0;
-          u.pitch = 1.0;
-          window.speechSynthesis.speak(u);
-    
+          if ((now - lastSpeakAt) < 900) return;
+
+          // iOS a veces ignora la primera; forzamos "warm-up" la primera vez
+          if (!ttsWarmed) {
+            window.speechSynthesis.cancel();
+            const warm = new SpeechSynthesisUtterance(" ");
+            window.speechSynthesis.speak(warm);
+            setTimeout(() => {
+              const u = new SpeechSynthesisUtterance(text);
+              u.volume = 1.0; u.rate = 1.0; u.pitch = 1.0;
+              window.speechSynthesis.speak(u);
+            }, 120);
+            ttsWarmed = true;
+          } else {
+            window.speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(text);
+            u.volume = 1.0; u.rate = 1.0; u.pitch = 1.0;
+            window.speechSynthesis.speak(u);
+          }
+
           lastSpeakAt = now;
           if (key) lastSpokenKey = key;
         } catch (e) {}
