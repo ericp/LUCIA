@@ -3,9 +3,9 @@ import os
 import cv2
 import numpy as np
 
-# ======================
+
 # Configuración
-# ======================
+
 # Lista de objetos relevantes (COCO names estándar del yolov8n.pt)
 OBJECTS_OF_INTEREST = [
     "bottle", "cup", "fork", "spoon", "knife",
@@ -27,9 +27,9 @@ INFER_IMGSZ = 640
 INFER_CONF = 0.25
 INFER_IOU = 0.50
 
-# ======================
+
 # Cargar SIEMPRE pesos base (para descartar pesos corruptos)
-# ======================
+
 MODEL_PATH = "yolov8n.pt"   # <- forzado a base
 print(f"[boot] Loading YOLO weights: {MODEL_PATH}")
 model = YOLO(MODEL_PATH)
@@ -40,9 +40,9 @@ except Exception as e:
     print(f"[boot] Could not read model.names: {e}")
 
 
-# ======================
+
 # Utilidades
-# ======================
+
 def _enhance_for_detection(img: np.ndarray) -> np.ndarray:
     """
     Mejora ligera de contraste para condiciones de poca luz.
@@ -148,16 +148,16 @@ def _predict_once(img_bgr: np.ndarray, imgsz=INFER_IMGSZ, conf=INFER_CONF, iou=I
     return best
 
 
-# ======================
+
 # API principal
-# ======================
+
 def detect_objects_in_frame(frame: np.ndarray):
     """
     Entrada: frame (BGR, np.ndarray)
     Salida:
       - label (str | None)
       - confidence (float | None)
-      - hints (dict)  -> distance, center, light, etc.
+      - hints (dict): distance, center, light, etc.
     """
     if frame is None or not isinstance(frame, np.ndarray):
         return None, None, {"distance": "unknown", "center": "unknown", "light": "check"}
@@ -187,13 +187,13 @@ def detect_objects_in_frame(frame: np.ndarray):
     return None, None, hints
 
 
-# ======================
-# Self-test opcional (usado por /yolo-selftest)
-# ======================
+
+# Self-test (usado por /yolo-selftest)
+
 def yolo_selftest():
     """
     Devuelve cuántas cajas detecta en la imagen demo 'bus.jpg' de Ultralytics.
-    Si devuelve 0, tu instalación/pesos están mal.
+    Si devuelve 0, la instalación/pesos estarian mal.
     """
     try:
         r = model.predict(source="https://ultralytics.com/images/bus.jpg",

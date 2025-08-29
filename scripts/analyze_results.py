@@ -25,35 +25,35 @@ def generate_pdf_report(outdir, overall_accuracy, acc_by_object, acc_by_user, ac
     styles = getSampleStyleSheet()
     story = []
 
-    # Title
+    # Título
     story.append(Paragraph("LUCIA - Validation Report", styles['Title']))
-    story.append(Paragraph(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles['Normal']))
+    story.append(Paragraph(f"Generado el: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles['Normal']))
     story.append(Spacer(1, 12))
 
-    # Summary metrics
-    story.append(Paragraph("<b>Summary metrics</b>", styles['Heading2']))
-    story.append(Paragraph(f"Global accuracy: {overall_accuracy:.2f} %", styles['Normal']))
+    # Métricas resumen
+    story.append(Paragraph("<b>Métricas resumen</b>", styles['Heading2']))
+    story.append(Paragraph(f"Precisión global: {overall_accuracy:.2f} %", styles['Normal']))
     story.append(Spacer(1, 8))
 
-    # Small summary table (from summary_df)
+    # Pequeña tabla resumen (desde summary_df)
     tbl_data = [list(summary_df.columns)] + summary_df.values.tolist()
     story.append(Table(tbl_data))
     story.append(Spacer(1, 12))
 
-    # Accuracy by object
-    story.append(Paragraph("<b>Accuracy by object</b>", styles['Heading3']))
+    # Precisión por objeto
+    story.append(Paragraph("<b>Precisión por objeto</b>", styles['Heading3']))
     data_obj = [["Object", "Accuracy (%)", "N"]] + [[str(idx), f"{row['Accuracy_%']:.2f}", int(row['N'])] for idx, row in acc_by_object.reset_index().iterrows()]
     story.append(Table(data_obj))
     story.append(Spacer(1, 12))
 
-    # Accuracy by user
-    story.append(Paragraph("<b>Accuracy by user</b>", styles['Heading3']))
+    # Precisión por usuario
+    story.append(Paragraph("<b>Precisión por usuario</b>", styles['Heading3']))
     data_user = [["User", "Accuracy (%)", "N"]] + [[str(idx), f"{row['Accuracy_%']:.2f}", int(row['N'])] for idx, row in acc_by_user.reset_index().iterrows()]
     story.append(Table(data_user))
     story.append(Spacer(1, 12))
 
-    # Accuracy by image condition
-    story.append(Paragraph("<b>Accuracy by image condition (top rows)</b>", styles['Heading3']))
+    # Precisión por condición de imagen
+    story.append(Paragraph("<b>Precisión por condición de imagen (primeras filas)</b>", styles['Heading3']))
     acc_by_cond_top = acc_by_cond.reset_index().head(20)
     data_cond = [["Condition", "Accuracy (%)", "N"]] + [
         [str(idx), f"{row['Accuracy_%']:.2f}", int(row['N'])]
@@ -62,8 +62,8 @@ def generate_pdf_report(outdir, overall_accuracy, acc_by_object, acc_by_user, ac
     story.append(Table(data_cond))
     story.append(Spacer(1, 12))
 
-    # Insert graphs if exist
-    story.append(Paragraph("<b>Charts</b>", styles['Heading2']))
+    # Insertar gráficos si existen
+    story.append(Paragraph("<b>Gráficos</b>", styles['Heading2']))
     charts = [
         "plot_accuracy_by_object.png",
         "plot_accuracy_by_user.png",
@@ -78,18 +78,18 @@ def generate_pdf_report(outdir, overall_accuracy, acc_by_object, acc_by_user, ac
                 story.append(Image(p, width=450, height=260))
                 story.append(Spacer(1, 12))
             except Exception as e:
-                story.append(Paragraph(f"Could not embed image {g}: {e}", styles['Normal']))
+                story.append(Paragraph(f"No se pudo incrustar la imagen {g}: {e}", styles['Normal']))
 
-    # Optional: include a sample of user notes if provided
+    # Opcional: incluir una muestra de notas de usuario si se proporciona
     if notes_sample is not None and len(notes_sample) > 0:
-        story.append(Paragraph("<b>Sample user notes</b>", styles['Heading2']))
+        story.append(Paragraph("<b>Muestra de notas de usuario</b>", styles['Heading2']))
         for note in notes_sample[:10]:
             txt = note if isinstance(note, str) else str(note)
             story.append(Paragraph(txt, styles['Normal']))
             story.append(Spacer(1, 6))
 
     doc.build(story)
-    print(f"✅ PDF report saved at {pdf_path}")
+    print(f" Informe PDF guardado en {pdf_path}")
 
 def main(input_path, out_dir):
     os.makedirs(out_dir, exist_ok=True)
@@ -101,13 +101,13 @@ def main(input_path, out_dir):
     if missing:
         print(f"WARNING: faltan columnas en el Excel: {missing}")
 
-    # Normalize
+    # Normalizar
     df["Detected_bool"] = df["Detected"].apply(to_bool_yes_no)
     df["Users"] = df["Users"].astype(str).str.strip()
     df["Attempts"] = pd.to_numeric(df["Attempts"], errors="coerce")
     df["Confidence"] = pd.to_numeric(df["Confidence"], errors="coerce")
 
-    # Summary metrics
+    # Métricas resumen
     n_rows = len(df)
     n_detected = int(df["Detected_bool"].sum(skipna=True))
     overall_accuracy = df["Detected_bool"].mean(skipna=True) * 100 if n_rows else np.nan
@@ -134,7 +134,7 @@ def main(input_path, out_dir):
         ]
     })
 
-    # Grouped metrics
+    # Métricas agrupadas
     acc_by_object = (df.groupby("Object")["Detected_bool"].mean() * 100).sort_values(ascending=False).to_frame("Accuracy_%")
     acc_by_object = acc_by_object.join(df.groupby("Object")["Detected_bool"].count().to_frame("N"))
 
@@ -147,7 +147,7 @@ def main(input_path, out_dir):
     attempts_by_object = df.groupby("Object")["Attempts"].agg(["mean", "std", "count"]).rename(columns={"mean": "Attempts_mean", "std": "Attempts_std", "count": "N"})
     conf_by_object = df.loc[df["Detected_bool"] == 1].groupby("Object")["Confidence"].agg(["mean", "std", "count"]).rename(columns={"mean": "Confidence_mean", "std": "Confidence_std", "count": "N_detected"})
 
-    # Save CSVs
+    # Guardar CSVs
     summary.to_csv(os.path.join(out_dir, "summary_metrics.csv"), index=False)
     acc_by_object.to_csv(os.path.join(out_dir, "accuracy_by_object.csv"))
     acc_by_user.to_csv(os.path.join(out_dir, "accuracy_by_user.csv"))
@@ -155,7 +155,7 @@ def main(input_path, out_dir):
     attempts_by_object.to_csv(os.path.join(out_dir, "attempts_by_object.csv"))
     conf_by_object.to_csv(os.path.join(out_dir, "confidence_by_object_detected_only.csv"))
 
-    # Charts
+    # Gráficos
     plt.figure()
     acc_by_object["Accuracy_%"].plot(kind="bar")
     plt.ylabel("Accuracy (%)")
@@ -212,10 +212,10 @@ def main(input_path, out_dir):
         plt.savefig(os.path.join(out_dir, "plot_confidence_by_object_boxplot.png"))
         plt.close()
 
-    print("✅ Análisis completado. Resultados en:", out_dir)
+    print(" Análisis completado. Resultados en:", out_dir)
 
-    # Generate PDF report using computed variables
-    # pass a small sample of notes for inclusion (optional)
+    # Generar informe PDF usando las variables calculadas
+    # pasar una pequeña muestra de notas para inclusión (opcional)
     notes_sample = df["Notes"].dropna().astype(str).tolist() if "Notes" in df.columns else None
     generate_pdf_report(out_dir, overall_accuracy, acc_by_object, acc_by_user, acc_by_cond, summary, notes_sample)
 

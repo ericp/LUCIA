@@ -41,11 +41,11 @@
     <h1>L.U.C.I.A.</h1>
     <p>Object Detection Assistant</p>
 
-    <!-- Preview (for guidance) -->
+    
     <video id="preview" playsinline autoplay muted></video>
     <canvas id="frame" style="display:none"></canvas>
 
-    <!-- File input for final capture -->
+   
     <input
       type="file"
       id="imageInput"
@@ -79,7 +79,7 @@
       let mediaStream = null;
       let guideTimer = null;
     
-      // ======== AUDIO CORE (iOS unlock) ========
+      //AUDIO CORE (iOS unlock)
       let audioCtx, osc, gain;
       async function ensureAudioUnlocked() {
         try {
@@ -118,7 +118,7 @@
         } catch (e) {}
       }
     
-      // ======== SPEECH (con cooldown y dedupe) ========
+      // SPEECH (con cooldown y dedupe)
       let lastSpeakAt = 0;
       let lastSpokenKey = "";
       let ttsWarmed = false;
@@ -132,7 +132,7 @@
           if (key && key === lastSpokenKey && (now - lastSpeakAt) < MIN_TTS_GAP_MS) return;
           // silencio mínimo global entre frases
           if ((now - lastSpeakAt) < MIN_TTS_GAP_MS) return;
-          // si ya está hablando, no interrumpas
+          // si ya está hablando, no interrumpirse
           if (window.speechSynthesis.speaking) return;
 
           // warm-up iOS sólo la primera vez
@@ -156,7 +156,7 @@
         } catch (e) {}
       }
     
-      // ======== Hints -> GUI + Sonidos + Voz ========
+      // Hints -> GUI + Sonidos + Voz
       let lastHintState = { distance: null, center: null, light: null };
     
       function updateGuidance(hints /*, ready */) {
@@ -185,14 +185,13 @@
           lastHintState = { distance, center, light };
         }
     
-        // ❌ Eliminado: no anunciar “Take the picture now”
-        // if (ready) { ... }
+      
       }
     
-      // ======== LIVE PREVIEW TTS: anunciar objeto detectado una vez por aparición ========
+      // LIVE PREVIEW TTS: anunciar objeto detectado una vez por aparición
       let lastPreviewLabel = null;
     
-      // ======== Start guidance ========
+      // Start guidance 
       document.getElementById('startBtn').addEventListener('click', async () => {
         try {
           await ensureAudioUnlocked();
@@ -230,7 +229,7 @@
               document.getElementById('status').innerText = 'Preview: scanning...';
             }
     
-            // 🎤 VOZ EN DIRECTO DEL OBJETO: una vez por aparición/cambio
+            // VOZ EN DIRECTO DEL OBJETO: una vez por aparición/cambio
             if (data.object_detected) {
               const label = String(data.object_detected);
               if (label !== lastPreviewLabel) {
@@ -247,7 +246,7 @@
         }
       });
     
-      // ======== Stop guidance ========
+      // Stop de la voz 
       document.getElementById('stopBtn').addEventListener('click', () => {
         if (guideTimer) { clearInterval(guideTimer); guideTimer = null; }
         stopBeep();
@@ -266,7 +265,7 @@
         document.getElementById('status').innerText = 'Guidance stopped';
       });
     
-      // ======== Capture -> /detect ========
+      // Capture -> /detect 
       document.getElementById('captureBtn').addEventListener('click', () => {
         const inp = document.getElementById('imageInput');
         inp.value = ''; inp.click();
@@ -299,14 +298,14 @@
         }
       });
     
-      // ======== Botón de test ========
+      // Botón de test
       document.getElementById('audioTestBtn').addEventListener('click', async () => {
         await ensureAudioUnlocked();
         await beepBurst(800, 0.2, 300);
         speakPhone("Audio enabled, guidance will speak now", "audio-test");
       });
     
-      // ======== Corrección ========
+      // Corrección 
       document.getElementById('correctBtn').addEventListener('click', async () => {
         if (!currentDetectionId) { alert('No detection to correct'); return; }
         const newLabel = document.getElementById('newLabel').value.trim();

@@ -1,5 +1,3 @@
-#Here we will have functions that download and unzip the data authomatically
-
 import os
 import urllib.request
 import zipfile
@@ -54,7 +52,7 @@ def download_coco():
     extract_zip(zip_ann, out_ann)
 
 def download_openimages_subset():
-    # Ejemplo de primer archivo de Open Images v6 (puedes repetir para más partes)
+    # Ejemplo de primer archivo de Open Images v6
     url = "https://storage.googleapis.com/openimages/v6/zip/train_0.zip"
     zip_path = os.path.join(RAW_DIR, "openimages_train_0.zip")
     out_dir = os.path.join(RAW_DIR, "OpenImages", "train_0")
@@ -68,19 +66,7 @@ def download_food101():
     download_file(url, tar_path)
     extract_tar(tar_path, out_dir)
 
-def download_roboflow_dataset(api_key: str, workspace: str, project: str, version: str):
-    """
-    Si luego decides usar Roboflow, aquí podrías invocar su API:
-    pip install roboflow
-    """
-    from roboflow import Roboflow
-    rf = Roboflow(api_key=api_key)
-    ds = rf.workspace(workspace).project(project).version(version).download("coco")
-    print(f"[OK]    Roboflow {project} v{version} descargado en {ds.location}")
-
 if __name__ == "__main__":
     download_coco()
     download_openimages_subset()
     download_food101()
-    # download_roboflow_dataset(api_key="TU_APIKEY", workspace="mi_workspace", project="objetos-peligrosos", version="1")
-

@@ -8,4 +8,4 @@ client = TestClient(app)
 
 def test_detect_endpoint_no_file():
     response = client.post("/detect")
-    assert response.status_code == 422  # Missing file
+    assert response.status_code == 422  

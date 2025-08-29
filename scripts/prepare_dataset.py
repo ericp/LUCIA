@@ -3,15 +3,15 @@ import random
 import shutil
 from sklearn.model_selection import train_test_split
 
-# === CONFIGURACIÓN ===
+# CONFIGURACIÓN
 USER_LABELS_DIR = "data/user_labels"
 OUTPUT_DIR = "data/dataset_yolo"
 TRAIN_SPLIT = 0.8  # 80% train, 20% val
 
-# Lista de clases que vas a usar (deben coincidir con el modelo YOLO)
+# Lista de clases que voy a usar (deben coincidir con el modelo YOLO)
 CLASSES = ["bottle", "cup", "fork", "spoon", "knife", "book", "laptop", "cell phone", "remote", "plant"]
 
-# === FUNCIONES ===
+#  FUNCIONES
 def prepare_yolo_dataset():
     # Rutas de imágenes corregidas
     all_images = [f for f in os.listdir(USER_LABELS_DIR) if f.lower().endswith((".jpg", ".jpeg", ".png"))]
@@ -42,9 +42,8 @@ def prepare_yolo_dataset():
             label_name = img.split("_")[0]
             if label_name in CLASSES:
                 class_id = CLASSES.index(label_name)
-                # Como no tenemos bounding boxes, YOLO necesita algo → marcador vacío o aproximado
+                # Al no tener bounding boxes, YOLO necesita marcador vacío o aproximado
                 with open(dst_label_path, "w") as f:
-                    # Esto es un placeholder. Deberías extraer las cajas reales para entrenamiento real.
                     f.write(f"{class_id} 0.5 0.5 1.0 1.0\n")  # caja que cubre toda la imagen
             else:
                 print(f"[WARN] Clase {label_name} no está en CLASSES. Saltando...")
