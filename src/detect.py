@@ -6,13 +6,13 @@ import numpy as np
 
 # Configuración
 
-# Lista de objetos relevantes (COCO names estándar del yolov8n.pt)
+# Lista de objetos relevantes (COCO estándar del yolov8n.pt)
 OBJECTS_OF_INTEREST = [
     "bottle", "cup", "fork", "spoon", "knife",
     "book", "laptop", "cell phone", "remote", "plant"
 ]
 
-# Umbral por clase (afinable)
+# Umbral por clase
 CLASS_THRESH = {
     "fork": 0.40, "spoon": 0.40, "knife": 0.40,
     "cup": 0.40, "bottle": 0.40,
@@ -28,9 +28,9 @@ INFER_CONF = 0.25
 INFER_IOU = 0.50
 
 
-# Cargar SIEMPRE pesos base (para descartar pesos corruptos)
+# Cargar siempre pesos base (para descartar pesos corruptos)
 
-MODEL_PATH = "yolov8n.pt"   # <- forzado a base
+MODEL_PATH = "yolov8n.pt"   
 print(f"[boot] Loading YOLO weights: {MODEL_PATH}")
 model = YOLO(MODEL_PATH)
 try:
@@ -68,7 +68,7 @@ def _enhance_for_detection(img: np.ndarray) -> np.ndarray:
 
 
 def _compute_hints(img, best_box, img_w, img_h):
-    """ Devuelve hints (distance, center, light) + métricas de apoyo. """
+    """ Devuelve hints (distance, center, light) y métricas de apoyo. """
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     brightness = float(gray.mean())
 

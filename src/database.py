@@ -20,16 +20,16 @@ Base = declarative_base()
 class Detection(Base):
     __tablename__ = "detections"
     id = Column(Integer, primary_key=True, index=True)
-    filename = Column(String, index=True)   # nombre de archivo (si quieres guardarlo)
-    label = Column(String, index=True)      # etiqueta detectada
-    confidence = Column(Float)              # confianza del model
+    filename = Column(String, index=True)   
+    label = Column(String, index=True)      
+    confidence = Column(Float)              
 
 
 class UserLabel(Base):
     __tablename__ = "user_labels"
     id = Column(Integer, primary_key=True, index=True)
-    detection_id = Column(Integer, index=True)  # referencia a detections
-    label = Column(String, index=True)          # etiqueta corregida
+    detection_id = Column(Integer, index=True)  
+    label = Column(String, index=True)          
 
 # Crear las tablas si no existen
 Base.metadata.create_all(bind=engine)

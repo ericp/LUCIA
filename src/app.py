@@ -8,7 +8,7 @@ import numpy as np
 import os
 import shutil
 
-# Import detection logic, text-to-speech, and database models
+# Importar detection logic, text-to-speech, y database models
 from src.detect import detect_objects_in_frame
 from src.tts import speak
 from src.database import SessionLocal, Detection, UserLabel
@@ -50,7 +50,7 @@ os.makedirs(CORRECTED_IMAGES_DIR, exist_ok=True)
 async def detect_object(file: UploadFile = File(...)):
     """
     Recibe imagen, detecta objeto, guarda en BD (si hay detección) y responde al frontend con hints de guía.
-    La imagen se nombra SIEMPRE como <id_padded>.jpg (ejemplo: 003.jpg)
+    La imagen se nombra siempre como <id_padded>.jpg (ejemplo: 003.jpg)
     """
     contents = await file.read()
 
@@ -82,7 +82,7 @@ async def detect_object(file: UploadFile = File(...)):
         session.commit()
         session.close()
 
-        # TTS local en Mac (opcional)
+        # TTS local en Mac
         try:
             speak(f"{label} detected")
         except Exception:
