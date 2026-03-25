@@ -6,10 +6,10 @@ import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def test_detect_returns_tuple():
-    # Crea una imagen negra (sin objetos)
+    # Create a black image (no objects)
     frame = np.zeros((640, 480, 3), dtype=np.uint8)
     label, confidence = detect_objects_in_frame(frame)
 
-    # Debe devolver un tuple
+    # Must return a tuple
     assert isinstance(label, (str, type(None)))
     assert isinstance(confidence, (float, type(None)))

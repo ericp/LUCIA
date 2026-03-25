@@ -8,14 +8,14 @@ import numpy as np
 import os
 import shutil
 
-# Importar detection logic, text-to-speech, y database models
+# Import detection logic, text-to-speech, and database models
 from src.detect import detect_objects_in_frame
 from src.tts import speak
 from src.database import SessionLocal, Detection, UserLabel
 
 app = FastAPI()
 
-#  Servir frontend estático en /web (NO en "/") 
+#  Serve static frontend at /web (NOT at "/") 
 if os.path.isdir("frontend"):
     app.mount("/web", StaticFiles(directory="frontend", html=True), name="frontend")
 
@@ -24,7 +24,7 @@ def root():
     return RedirectResponse(url="/web/")
 
 
-# CORS (para permitir llamadas desde el iPhone/otro host)
+# CORS (to allow calls from iPhone/other host)
 
 app.add_middleware(
     CORSMiddleware,
@@ -49,40 +49,40 @@ os.makedirs(CORRECTED_IMAGES_DIR, exist_ok=True)
 @app.post("/detect")
 async def detect_object(file: UploadFile = File(...)):
     """
-    Recibe imagen, detecta objeto, guarda en BD (si hay detección) y responde al frontend con hints de guía.
-    La imagen se nombra siempre como <id_padded>.jpg (ejemplo: 003.jpg)
+    Receives image, detects object, saves to DB (if there's detection) and responds to frontend with guidance hints.
+    The image is always named as <id_padded>.jpg (example: 003.jpg)
     """
     contents = await file.read()
 
-    # Procesar con OpenCV (todavía no guardamos a disco hasta tener el id)
+    # Process with OpenCV (not saving to disk yet until we have the id)
     npimg = np.frombuffer(contents, np.uint8)
     frame = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
-    # Detección -> (label, confidence, hints)
+    # Detection -> (label, confidence, hints)
     label, confidence, hints = detect_objects_in_frame(frame)
 
     if label:
-        # Crear fila en BD para obtener el id
+        # Create row in DB to get the id
         session = SessionLocal()
         detection = Detection(filename="", label=label, confidence=confidence)
         session.add(detection)
         session.commit()
         detection_id = detection.id
 
-        # Nombre final con ceros a la izquierda: 003.jpg, 010.jpg, ...
+        # Final name with leading zeros: 003.jpg, 010.jpg, ...
         final_name = f"{detection_id:03d}.jpg"
         image_save_path = os.path.join(IMAGES_DIR, final_name)
 
-        # Guardar la imagen con el nombre final
+        # Save the image with the final name
         with open(image_save_path, "wb") as f:
             f.write(contents)
 
-        # Actualizar filename en la BD
+        # Update filename in the DB
         detection.filename = final_name
         session.commit()
         session.close()
 
-        # TTS local en Mac
+        # Local TTS on Mac
         try:
             speak(f"{label} detected")
         except Exception:
@@ -98,7 +98,7 @@ async def detect_object(file: UploadFile = File(...)):
             }
         )
     else:
-        # Sin detección: no se guarda imagen ni fila en BD
+        # No detection: image nor row is saved in DB
         try:
             speak("No relevant object detected")
         except Exception:
@@ -120,8 +120,8 @@ async def detect_object(file: UploadFile = File(...)):
 @app.post("/guide")
 async def guide_object(file: UploadFile = File(...)):
     """
-    Recibe un frame (foto ligera) y devuelve hints para guiar al usuario en directo.
-    No guarda en BD ni hace TTS en el servidor.
+    Receives a frame (lightweight photo) and returns hints to guide the user in real time.
+    Does not save to DB nor do TTS on the server.
     """
     contents = await file.read()
     npimg = np.frombuffer(contents, np.uint8)
@@ -151,19 +151,19 @@ async def guide_object(file: UploadFile = File(...)):
 @app.post("/correct")
 async def correct_label(id: int = Form(...), new_label: str = Form(...)):
     """
-    Recibe corrección de etiqueta y la guarda en BD (tabla user_labels).
-    Mantiene el esquema original: copia la imagen como <new_label>_<filename> en data/user_labels/.
+    Receives label correction and saves it to DB (user_labels table).
+    Maintains the original schema: copies the image as <new_label>_<filename> in data/user_labels/.
     """
     session = SessionLocal()
     detection = session.query(Detection).filter(Detection.id == id).first()
 
     if detection:
-        # Guardar etiqueta corregida en tabla user_labels 
+        # Save corrected label in user_labels table 
         user_label = UserLabel(detection_id=id, label=new_label)
         session.add(user_label)
         session.commit()
 
-        # Copiar imagen original a carpeta de correcciones con prefijo de etiqueta
+        # Copy original image to corrections folder with label prefix
         original_path = os.path.join(IMAGES_DIR, detection.filename) 
         if os.path.exists(original_path):
             corrected_filename = f"{new_label}_{detection.filename}"
@@ -181,7 +181,7 @@ async def correct_label(id: int = Form(...), new_label: str = Form(...)):
 @app.get("/yolo-selftest")
 def yolo_selftest():
     """
-    Autocomprobación de la instalación de YOLOv8 usando la imagen de ejemplo bus.jpg incluida en Ultralytics.
+    Self-check of YOLOv8 installation using the example image bus.jpg included in Ultralytics.
     """
     try:
         from ultralytics.utils import ASSETS

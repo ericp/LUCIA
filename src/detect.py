@@ -4,31 +4,31 @@ import cv2
 import numpy as np
 
 
-# Configuración
+# Configuration
 
-# Lista de objetos relevantes (COCO estándar del yolov8n.pt)
+# List of relevant objects (standard COCO from yolov8n.pt)
 OBJECTS_OF_INTEREST = [
     "bottle", "cup", "fork", "spoon", "knife",
     "book", "laptop", "cell phone", "remote", "plant"
 ]
 
-# Umbral por clase
+# Threshold per class
 CLASS_THRESH = {
     "fork": 0.40, "spoon": 0.40, "knife": 0.40,
     "cup": 0.40, "bottle": 0.40,
     "book": 0.35, "laptop": 0.35, "cell phone": 0.35, "remote": 0.35, "plant": 0.35
 }
 
-# Evitar cajas diminutas
+# Avoid tiny boxes
 MIN_BOX_AREA = 24 * 24
 
-# Parámetros por defecto de inferencia
+# Default inference parameters
 INFER_IMGSZ = 640
 INFER_CONF = 0.25
 INFER_IOU = 0.50
 
 
-# Cargar siempre pesos base (para descartar pesos corruptos)
+# Always load base weights (to discard corrupted weights)
 
 MODEL_PATH = "yolov8n.pt"   
 print(f"[boot] Loading YOLO weights: {MODEL_PATH}")
@@ -41,13 +41,13 @@ except Exception as e:
 
 
 
-# Utilidades
+# Utilities
 
 def _enhance_for_detection(img: np.ndarray) -> np.ndarray:
     """
-    Mejora ligera de contraste para condiciones de poca luz.
-    - escala a 640px máx lado
-    - CLAHE en canal L del espacio LAB
+    Light contrast enhancement for low light conditions.
+    - scale to 640px max side
+    - CLAHE on L channel of LAB space
     """
     if img is None or not isinstance(img, np.ndarray):
         return img
@@ -68,7 +68,7 @@ def _enhance_for_detection(img: np.ndarray) -> np.ndarray:
 
 
 def _compute_hints(img, best_box, img_w, img_h):
-    """ Devuelve hints (distance, center, light) y métricas de apoyo. """
+    """ Returns hints (distance, center, light) and support metrics. """
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     brightness = float(gray.mean())
 
@@ -90,7 +90,7 @@ def _compute_hints(img, best_box, img_w, img_h):
     img_area = float(img_w * img_h)
     area_ratio = area / img_area if img_area > 0 else 0.0
 
-    # Distancia ~ tamaño relativo
+    # Distance ~ relative size
     if area_ratio < 0.03:
         dist_hint = "too_far"
     elif area_ratio > 0.45:
@@ -98,7 +98,7 @@ def _compute_hints(img, best_box, img_w, img_h):
     else:
         dist_hint = "ok"
 
-    # Centrado (0 perfecto, 1 borde)
+    # Centering (0 perfect, 1 edge)
     cx = (x1 + x2) / 2.0
     cy = (y1 + y2) / 2.0
     center_offset = max(abs(cx - img_w/2) / (img_w/2), abs(cy - img_h/2) / (img_h/2))
@@ -122,7 +122,7 @@ def _compute_hints(img, best_box, img_w, img_h):
 
 
 def _predict_once(img_bgr: np.ndarray, imgsz=INFER_IMGSZ, conf=INFER_CONF, iou=INFER_IOU):
-    """ Una pasada de YOLO y devuelve (label, conf, box_xyxy) para el mejor candidato (whitelist). """
+    """ One YOLO pass and returns (label, conf, box_xyxy) for the best candidate (whitelist). """
     res = model.predict(img_bgr, imgsz=imgsz, conf=conf, iou=iou, verbose=False, device='cpu')
     boxes = res[0].boxes
     names = model.names
@@ -149,12 +149,12 @@ def _predict_once(img_bgr: np.ndarray, imgsz=INFER_IMGSZ, conf=INFER_CONF, iou=I
 
 
 
-# API principal
+# Main API
 
 def detect_objects_in_frame(frame: np.ndarray):
     """
-    Entrada: frame (BGR, np.ndarray)
-    Salida:
+    Input: frame (BGR, np.ndarray)
+    Output:
       - label (str | None)
       - confidence (float | None)
       - hints (dict): distance, center, light, etc.
@@ -164,17 +164,17 @@ def detect_objects_in_frame(frame: np.ndarray):
 
     img_h, img_w = frame.shape[:2]
 
-    # 1) Mejora de imagen
+    # 1) Image enhancement
     enhanced = _enhance_for_detection(frame)
 
-    # 2) Pasada normal
+    # 2) Normal pass
     best = _predict_once(enhanced, imgsz=INFER_IMGSZ, conf=INFER_CONF, iou=INFER_IOU)
 
-    # 3) Si nada, intenta con conf más bajo (recuperación)
+    # 3) If nothing, try with lower confidence (recovery)
     if best is None:
         best = _predict_once(enhanced, imgsz=INFER_IMGSZ, conf=0.10, iou=0.50)
 
-    # 4) Construir hints SIEMPRE, con la mejor caja si existe
+    # 4) Build hints ALWAYS, with the best box if it exists
     best_box_for_hints = None if best is None else best[2]
     hints = _compute_hints(enhanced, best_box_for_hints, enhanced.shape[1], enhanced.shape[0])
 
@@ -188,12 +188,12 @@ def detect_objects_in_frame(frame: np.ndarray):
 
 
 
-# Self-test (usado por /yolo-selftest)
+# Self-test (used by /yolo-selftest)
 
 def yolo_selftest():
     """
-    Devuelve cuántas cajas detecta en la imagen demo 'bus.jpg' de Ultralytics.
-    Si devuelve 0, la instalación/pesos estarian mal.
+    Returns how many boxes it detects in the demo image 'bus.jpg' from Ultralytics.
+    If it returns 0, the installation/weights would be wrong.
     """
     try:
         r = model.predict(source="https://ultralytics.com/images/bus.jpg",

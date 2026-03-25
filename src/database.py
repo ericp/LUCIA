@@ -3,20 +3,20 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
 
-# Ruta absoluta al archivo SQLite
+# Absolute path to SQLite file
 DB_PATH = "/Users/eric/Documents/Masters Degree/M10.-TFM/LUCIA/data/db.sqlite3"
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 
-# Crear motor de base de datos
+# Create database engine
 engine = create_engine(DATABASE_URL)
 
-# Crear sesión
+# Create the session
 SessionLocal = sessionmaker(bind=engine)
 
-# Base para modelos
+# Base for models
 Base = declarative_base()
 
-# Modelo para detecciones
+# Model for detections
 class Detection(Base):
     __tablename__ = "detections"
     id = Column(Integer, primary_key=True, index=True)
@@ -31,6 +31,6 @@ class UserLabel(Base):
     detection_id = Column(Integer, index=True)  
     label = Column(String, index=True)          
 
-# Crear las tablas si no existen
+# Create tables if they don't exist
 Base.metadata.create_all(bind=engine)
 
