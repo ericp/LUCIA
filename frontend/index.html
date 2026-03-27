@@ -71,9 +71,9 @@
     </div>
 
     <script>
-      const API_BASE = ""; // mismo host
+      const API_BASE = ""; // same host
 
-      const MIN_TTS_GAP_MS = 3000; // espera mínima entre locuciones (3s)
+      const MIN_TTS_GAP_MS = 3000; // minimum wait between utterances (3s)
     
       let currentDetectionId = null;
       let mediaStream = null;
@@ -87,7 +87,7 @@
           if (audioCtx.state !== 'running') {
             await audioCtx.resume();
           }
-          // “click” inaudible → desbloquea audio iOS
+          // inaudible "click" → unlocks iOS audio
           const buffer = audioCtx.createBuffer(1, 1, audioCtx.sampleRate);
           const src = audioCtx.createBufferSource();
           src.buffer = buffer;
@@ -118,7 +118,7 @@
         } catch (e) {}
       }
     
-      // SPEECH (con cooldown y dedupe)
+      // SPEECH (with cooldown and dedupe)
       let lastSpeakAt = 0;
       let lastSpokenKey = "";
       let ttsWarmed = false;
@@ -128,14 +128,14 @@
           if (!('speechSynthesis' in window)) return;
           const now = Date.now();
 
-          // no repetir el mismo mensaje seguido
+          // don't repeat the same message consecutively
           if (key && key === lastSpokenKey && (now - lastSpeakAt) < MIN_TTS_GAP_MS) return;
-          // silencio mínimo global entre frases
+          // minimum global silence between sentences
           if ((now - lastSpeakAt) < MIN_TTS_GAP_MS) return;
-          // si ya está hablando, no interrumpirse
+          // if already speaking, don't interrupt
           if (window.speechSynthesis.speaking) return;
 
-          // warm-up iOS sólo la primera vez
+          // iOS warm-up only the first time
           if (!ttsWarmed) {
             const warm = new SpeechSynthesisUtterance(" ");
             window.speechSynthesis.speak(warm);
@@ -156,7 +156,7 @@
         } catch (e) {}
       }
     
-      // Hints -> GUI + Sonidos + Voz
+      // Hints -> GUI + Sounds + Voice
       let lastHintState = { distance: null, center: null, light: null };
     
       function updateGuidance(hints /*, ready */) {
@@ -188,7 +188,7 @@
       
       }
     
-      // LIVE PREVIEW TTS: anunciar objeto detectado una vez por aparición
+      // LIVE PREVIEW TTS: announce detected object once per appearance
       let lastPreviewLabel = null;
     
       // Start guidance 
@@ -218,10 +218,10 @@
             const r = await fetch(`${API_BASE}/guide`, { method: 'POST', body: fd });
             const data = await r.json();
     
-            // Hints de guía (sin “ready”)
+            // Guidance hints (without "ready")
             updateGuidance(data.hints /*, data.ready */);
     
-            // Texto en pantalla
+            // On-screen text
             if (data.object_detected) {
               document.getElementById('status').innerText =
                 `Preview: ${data.object_detected} (${(data.confidence * 100).toFixed(1)}%)`;
@@ -229,7 +229,7 @@
               document.getElementById('status').innerText = 'Preview: scanning...';
             }
     
-            // Voz en directo del objeto: una vez por aparición/cambio
+            // Live voice of object: once per appearance/change
             if (data.object_detected) {
               const label = String(data.object_detected);
               if (label !== lastPreviewLabel) {
@@ -237,7 +237,7 @@
                 lastPreviewLabel = label;
               }
             } else {
-              // Al volver a “scanning…”, resetea para poder anunciar el próximo objeto
+              // When returning to "scanning...", reset to be able to announce next object
               if (lastPreviewLabel !== null) lastPreviewLabel = null;
             }
           }, 500);
@@ -246,7 +246,7 @@
         }
       });
     
-      // Stop de la voz 
+      // Stop voice 
       document.getElementById('stopBtn').addEventListener('click', () => {
         if (guideTimer) { clearInterval(guideTimer); guideTimer = null; }
         stopBeep();
@@ -281,7 +281,7 @@
           const data = await r.json();
           updateGuidance(data.hints /*, false */);
           if (data.object_detected) {
-            // También decir el resultado final en el iPhone
+            // Also say the final result on iPhone
             speakPhone(`${data.object_detected} detected`, "final-detected");
             document.getElementById('status').innerText =
               `ID: ${data.id} - Detected: ${data.object_detected} (${(data.confidence * 100).toFixed(1)}%)`;
@@ -298,14 +298,14 @@
         }
       });
     
-      // Botón de test
+      // Test button
       document.getElementById('audioTestBtn').addEventListener('click', async () => {
         await ensureAudioUnlocked();
         await beepBurst(800, 0.2, 300);
         speakPhone("Audio enabled, guidance will speak now", "audio-test");
       });
     
-      // Corrección 
+      // Correction 
       document.getElementById('correctBtn').addEventListener('click', async () => {
         if (!currentDetectionId) { alert('No detection to correct'); return; }
         const newLabel = document.getElementById('newLabel').value.trim();
