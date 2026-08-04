@@ -5,7 +5,9 @@ final class CameraService: NSObject {
     let session = AVCaptureSession()
 
     private let sessionQueue = DispatchQueue(label: "lucia.camera.session")
+    private let photoOutput = AVCapturePhotoOutput()
     private var isConfigured = false
+    private var photoCaptureDelegate: PhotoCaptureDelegate?
 
     func prepareSession() async throws -> Bool {
         let granted = await requestAccessIfNeeded()
@@ -29,6 +31,23 @@ final class CameraService: NSObject {
         sessionQueue.async {
             guard self.session.isRunning else { return }
             self.session.stopRunning()
+        }
+    }
+
+    func capturePhoto() async throws -> Data {
+        guard isConfigured else { throw CameraError.sessionNotConfigured }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            sessionQueue.async {
+                let settings = AVCapturePhotoSettings()
+
+                let delegate = PhotoCaptureDelegate { [weak self] result in
+                    self?.photoCaptureDelegate = nil
+                    continuation.resume(with: result)
+                }
+                self.photoCaptureDelegate = delegate
+                self.photoOutput.capturePhoto(with: settings, delegate: delegate)
+            }
         }
     }
 
@@ -62,6 +81,11 @@ final class CameraService: NSObject {
                     }
 
                     self.session.addInput(input)
+
+                    guard self.session.canAddOutput(self.photoOutput) else {
+                        throw CameraError.cannotAddPhotoOutput
+                    }
+                    self.session.addOutput(self.photoOutput)
                     self.session.commitConfiguration()
                     self.isConfigured = true
                     continuation.resume()
@@ -77,6 +101,9 @@ final class CameraService: NSObject {
 enum CameraError: LocalizedError {
     case noCameraFound
     case cannotAddInput
+    case cannotAddPhotoOutput
+    case sessionNotConfigured
+    case photoDataUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -84,6 +111,34 @@ enum CameraError: LocalizedError {
             return "No back camera was found on this device."
         case .cannotAddInput:
             return "The camera could not be attached to the session."
+        case .cannotAddPhotoOutput:
+            return "Photo capture could not be attached to the camera session."
+        case .sessionNotConfigured:
+            return "The camera is not ready yet."
+        case .photoDataUnavailable:
+            return "The captured photo could not be processed."
+        }
+    }
+}
+
+private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
+    private let completion: (Result<Data, Error>) -> Void
+
+    init(completion: @escaping (Result<Data, Error>) -> Void) {
+        self.completion = completion
+    }
+
+    func photoOutput(
+        _ output: AVCapturePhotoOutput,
+        didFinishProcessingPhoto photo: AVCapturePhoto,
+        error: Error?
+    ) {
+        if let error {
+            completion(.failure(error))
+        } else if let data = photo.fileDataRepresentation() {
+            completion(.success(data))
+        } else {
+            completion(.failure(CameraError.photoDataUnavailable))
         }
     }
 }

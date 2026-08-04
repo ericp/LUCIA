@@ -45,7 +45,7 @@ struct ContentView: View {
                             systemImage: "camera.aperture",
                             backgroundColor: Color(red: 0.06, green: 0.28, blue: 0.54)
                         ) {
-                            pendingActionMessage = "Capture flow will connect to /detect in the next step."
+                            showCamera = true
                         }
 
                         LargeActionButton(
