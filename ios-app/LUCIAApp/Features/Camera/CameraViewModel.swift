@@ -12,6 +12,9 @@ final class CameraViewModel: ObservableObject {
 
     @Published private(set) var state: State = .loading
     @Published private(set) var message = "Preparing camera..."
+    @Published private(set) var isCapturing = false
+    @Published var detectionResult: DetectionResult?
+    @Published var captureError: String?
 
     let session: AVCaptureSession
 
@@ -46,5 +49,20 @@ final class CameraViewModel: ObservableObject {
     func stop() {
         service.stopRunning()
         hasStarted = false
+    }
+
+    func capture() async {
+        guard state == .ready, !isCapturing else { return }
+        isCapturing = true
+        captureError = nil
+
+        do {
+            let imageData = try await service.capturePhoto()
+            detectionResult = try await APIClient.shared.detect(imageData: imageData)
+        } catch {
+            captureError = error.localizedDescription
+        }
+
+        isCapturing = false
     }
 }

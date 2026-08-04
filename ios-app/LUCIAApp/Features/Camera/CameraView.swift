@@ -47,6 +47,20 @@ struct CameraView: View {
         .onDisappear {
             viewModel.stop()
         }
+        .navigationDestination(item: $viewModel.detectionResult) { result in
+            DetectionResultView(result: result)
+        }
+        .alert(
+            "Detection Failed",
+            isPresented: Binding(
+                get: { viewModel.captureError != nil },
+                set: { if !$0 { viewModel.captureError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { viewModel.captureError = nil }
+        } message: {
+            Text(viewModel.captureError ?? "Please try again.")
+        }
     }
 
     private var topOverlay: some View {
@@ -64,7 +78,7 @@ struct CameraView: View {
 
     private var bottomOverlay: some View {
         VStack(spacing: 14) {
-            Text("This step only opens the live camera. Capture and API calls come next.")
+            Text("Hold the camera steady, then capture an object to identify it.")
                 .font(.headline.weight(.semibold))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.white)
@@ -73,8 +87,17 @@ struct CameraView: View {
                 .frame(maxWidth: .infinity)
                 .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
 
-            Button(action: {}) {
-                Text("Capture Coming Next")
+            Button {
+                Task { await viewModel.capture() }
+            } label: {
+                HStack(spacing: 14) {
+                    if viewModel.isCapturing {
+                        ProgressView().tint(.white)
+                    } else {
+                        Image(systemName: "camera.fill")
+                    }
+                    Text(viewModel.isCapturing ? "Detecting…" : "Capture Object")
+                }
                     .font(.system(size: 24, weight: .heavy, design: .rounded))
                     .foregroundStyle(.white.opacity(0.92))
                     .frame(maxWidth: .infinity, minHeight: 90)
@@ -84,7 +107,8 @@ struct CameraView: View {
                             .stroke(.white.opacity(0.24), lineWidth: 1.5)
                     )
             }
-            .disabled(true)
+            .disabled(viewModel.state != .ready || viewModel.isCapturing)
+            .accessibilityHint("Takes a photo and identifies the object")
         }
     }
 
