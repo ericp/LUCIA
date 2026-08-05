@@ -46,16 +46,3 @@ struct LargeActionButton: View {
         .accessibilityAddTraits(.isButton)
     }
 }
-
-#Preview {
-    ZStack {
-        Color.gray.opacity(0.15).ignoresSafeArea()
-        LargeActionButton(
-            title: "Open Camera",
-            subtitle: "Primary access for live guidance",
-            systemImage: "camera.fill",
-            backgroundColor: .green
-        ) {}
-        .padding()
-    }
-}

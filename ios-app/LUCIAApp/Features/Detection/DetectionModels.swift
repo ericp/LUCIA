@@ -26,3 +26,17 @@ struct DetectionHints: Codable, Hashable {
     let center: String?
     let light: String?
 }
+
+struct GuidanceResult: Codable, Hashable {
+    let objectDetected: String?
+    let confidence: Double?
+    let hints: DetectionHints
+    let ready: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case objectDetected = "object_detected"
+        case confidence
+        case hints
+        case ready
+    }
+}

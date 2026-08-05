@@ -5,7 +5,10 @@ final class CameraService: NSObject {
     let session = AVCaptureSession()
 
     private let sessionQueue = DispatchQueue(label: "lucia.camera.session")
+    private let frameQueue = DispatchQueue(label: "lucia.camera.frames")
     private let photoOutput = AVCapturePhotoOutput()
+    private let videoOutput = AVCaptureVideoDataOutput()
+    private let frameCapture = FrameCapture()
     private var isConfigured = false
     private var photoCaptureDelegate: PhotoCaptureDelegate?
 
@@ -51,6 +54,10 @@ final class CameraService: NSObject {
         }
     }
 
+    func latestGuidanceFrame() -> Data? {
+        frameCapture.latestFrameData()
+    }
+
     private func requestAccessIfNeeded() async -> Bool {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
@@ -86,6 +93,16 @@ final class CameraService: NSObject {
                         throw CameraError.cannotAddPhotoOutput
                     }
                     self.session.addOutput(self.photoOutput)
+
+                    guard self.session.canAddOutput(self.videoOutput) else {
+                        throw CameraError.cannotAddVideoOutput
+                    }
+                    self.videoOutput.alwaysDiscardsLateVideoFrames = true
+                    self.videoOutput.videoSettings = [
+                        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+                    ]
+                    self.videoOutput.setSampleBufferDelegate(self.frameCapture, queue: self.frameQueue)
+                    self.session.addOutput(self.videoOutput)
                     self.session.commitConfiguration()
                     self.isConfigured = true
                     continuation.resume()
@@ -102,6 +119,7 @@ enum CameraError: LocalizedError {
     case noCameraFound
     case cannotAddInput
     case cannotAddPhotoOutput
+    case cannotAddVideoOutput
     case sessionNotConfigured
     case photoDataUnavailable
 
@@ -113,6 +131,8 @@ enum CameraError: LocalizedError {
             return "The camera could not be attached to the session."
         case .cannotAddPhotoOutput:
             return "Photo capture could not be attached to the camera session."
+        case .cannotAddVideoOutput:
+            return "Live guidance could not be attached to the camera session."
         case .sessionNotConfigured:
             return "The camera is not ready yet."
         case .photoDataUnavailable:
