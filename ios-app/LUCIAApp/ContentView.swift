@@ -54,7 +54,7 @@ struct ContentView: View {
                             systemImage: "speaker.wave.3.fill",
                             backgroundColor: Color(red: 0.58, green: 0.32, blue: 0.12)
                         ) {
-                            pendingActionMessage = "Guidance flow will connect to /guide in the next step."
+                            showCamera = true
                         }
 
                         LargeActionButton(
@@ -97,8 +97,4 @@ struct ContentView: View {
             )
         }
     }
-}
-
-#Preview {
-    ContentView()
 }

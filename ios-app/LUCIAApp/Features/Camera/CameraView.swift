@@ -78,14 +78,11 @@ struct CameraView: View {
 
     private var bottomOverlay: some View {
         VStack(spacing: 14) {
-            Text("Hold the camera steady, then capture an object to identify it.")
-                .font(.headline.weight(.semibold))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 14)
-                .frame(maxWidth: .infinity)
-                .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            GuidanceView(
+                message: viewModel.guidanceMessage,
+                detectedObject: viewModel.guidanceObject,
+                isAvailable: viewModel.isGuidanceAvailable
+            )
 
             Button {
                 Task { await viewModel.capture() }
@@ -128,11 +125,5 @@ struct CameraView: View {
                 .foregroundStyle(.white.opacity(0.82))
                 .padding(.horizontal, 24)
         }
-    }
-}
-
-#Preview {
-    NavigationStack {
-        CameraView()
     }
 }

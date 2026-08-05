@@ -12,8 +12,20 @@ final class APIClient {
     }
 
     func detect(imageData: Data) async throws -> DetectionResult {
+        try await upload(imageData: imageData, path: "detect", as: DetectionResult.self)
+    }
+
+    func guide(imageData: Data) async throws -> GuidanceResult {
+        try await upload(imageData: imageData, path: "guide", as: GuidanceResult.self)
+    }
+
+    private func upload<Response: Decodable>(
+        imageData: Data,
+        path: String,
+        as responseType: Response.Type
+    ) async throws -> Response {
         let boundary = "Boundary-\(UUID().uuidString)"
-        var request = URLRequest(url: baseURL.appendingPathComponent("detect"))
+        var request = URLRequest(url: baseURL.appendingPathComponent(path))
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.httpBody = MultipartFormData.image(imageData, boundary: boundary)
@@ -28,7 +40,7 @@ final class APIClient {
         }
 
         do {
-            return try JSONDecoder().decode(DetectionResult.self, from: data)
+            return try JSONDecoder().decode(Response.self, from: data)
         } catch {
             throw APIError.invalidPayload
         }
