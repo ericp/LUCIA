@@ -39,7 +39,7 @@ struct LargeActionButton: View {
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
                     .stroke(Color.white.opacity(0.16), lineWidth: 1.5)
             )
-            .shadow(color: backgroundColor.opacity(0.28), radius: 14, x: 0, y: 8)
+            .shadow(color: .black.opacity(0.22), radius: 14, x: 0, y: 8)
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)

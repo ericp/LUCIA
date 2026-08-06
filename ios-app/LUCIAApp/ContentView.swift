@@ -6,15 +6,7 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.97, green: 0.95, blue: 0.89),
-                        Color(red: 0.88, green: 0.92, blue: 0.96)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                Color.white.ignoresSafeArea()
 
                 VStack(alignment: .leading, spacing: 28) {
                     VStack(alignment: .leading, spacing: 12) {
@@ -33,7 +25,7 @@ struct ContentView: View {
                             title: "Open Camera",
                             subtitle: "Primary access for live guidance",
                             systemImage: "camera.fill",
-                            backgroundColor: Color(red: 0.12, green: 0.38, blue: 0.27)
+                            backgroundColor: .black
                         ) {
                             showCamera = true
                         }
@@ -42,7 +34,7 @@ struct ContentView: View {
                             title: "Capture Image",
                             subtitle: "Send a photo to the detection API",
                             systemImage: "camera.aperture",
-                            backgroundColor: Color(red: 0.06, green: 0.28, blue: 0.54)
+                            backgroundColor: .black
                         ) {
                             showCamera = true
                         }
@@ -51,7 +43,7 @@ struct ContentView: View {
                             title: "Start Guidance",
                             subtitle: "Use voice and hints while aiming",
                             systemImage: "speaker.wave.3.fill",
-                            backgroundColor: Color(red: 0.58, green: 0.32, blue: 0.12)
+                            backgroundColor: .black
                         ) {
                             showCamera = true
                         }
@@ -60,7 +52,7 @@ struct ContentView: View {
                             title: "Send Correction",
                             subtitle: "Capture an object, then correct its label",
                             systemImage: "pencil.circle.fill",
-                            backgroundColor: Color(red: 0.36, green: 0.18, blue: 0.46)
+                            backgroundColor: .black
                         ) {
                             showCamera = true
                         }

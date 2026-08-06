@@ -60,7 +60,7 @@ struct CorrectionView: View {
                         Spacer()
                         Image(systemName: viewModel.selectedLabel == label ? "checkmark.circle.fill" : "circle")
                             .font(.title2)
-                            .foregroundStyle(viewModel.selectedLabel == label ? .blue : .secondary)
+                            .foregroundStyle(.black)
                     }
                     .contentShape(Rectangle())
                     .padding(.vertical, 6)
@@ -82,7 +82,7 @@ struct CorrectionView: View {
                 .font(.title3.weight(.bold))
                 .frame(maxWidth: .infinity, minHeight: 64)
                 .foregroundStyle(.white)
-                .background(.blue, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .background(.black, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             }
             .disabled(viewModel.isSubmitting)
             .padding()
@@ -94,7 +94,7 @@ struct CorrectionView: View {
         VStack(spacing: 24) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 88))
-                .foregroundStyle(.green)
+                .foregroundStyle(.black)
 
             Text("Correction Saved")
                 .font(.largeTitle.weight(.bold))
@@ -102,13 +102,13 @@ struct CorrectionView: View {
             Text("The object was labeled as \(label.capitalized).")
                 .font(.title3.weight(.medium))
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.black.opacity(0.65))
 
             Button("Done") { dismiss() }
                 .font(.title3.weight(.bold))
                 .frame(maxWidth: .infinity, minHeight: 64)
                 .foregroundStyle(.white)
-                .background(.green, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .background(.black, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
         .padding(24)
     }
