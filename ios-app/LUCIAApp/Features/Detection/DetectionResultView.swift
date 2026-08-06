@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct DetectionResultView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var showCorrection = false
+
     let result: DetectionResult
 
     var body: some View {
@@ -36,11 +39,45 @@ struct DetectionResultView: View {
                     .padding(.horizontal)
 
                 Spacer()
+
+                VStack(spacing: 14) {
+                    if result.id != nil {
+                        Button {
+                            showCorrection = true
+                        } label: {
+                            Label("Correct Result", systemImage: "pencil.circle.fill")
+                                .font(.title3.weight(.bold))
+                                .frame(maxWidth: .infinity, minHeight: 64)
+                                .foregroundStyle(.white)
+                                .background(.blue, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        }
+                        .accessibilityHint("Choose the correct object label")
+                    }
+
+                    Button {
+                        dismiss()
+                    } label: {
+                        Label("Try Again", systemImage: "camera.fill")
+                            .font(.title3.weight(.bold))
+                            .frame(maxWidth: .infinity, minHeight: 64)
+                            .foregroundStyle(.primary)
+                            .background(.white.opacity(0.85), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    }
+                    .accessibilityHint("Returns to the camera")
+                }
             }
             .padding(.horizontal, 24)
-            .padding(.top, 54)
+            .padding(.vertical, 36)
         }
         .navigationTitle("Detection Result")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showCorrection) {
+            if let detectionID = result.id {
+                CorrectionView(
+                    detectionID: detectionID,
+                    currentLabel: result.objectDetected
+                )
+            }
+        }
     }
 }

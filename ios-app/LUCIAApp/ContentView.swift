@@ -2,7 +2,6 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var showCamera = false
-    @State private var pendingActionMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -59,11 +58,11 @@ struct ContentView: View {
 
                         LargeActionButton(
                             title: "Send Correction",
-                            subtitle: "Correct the detected label if needed",
+                            subtitle: "Capture an object, then correct its label",
                             systemImage: "pencil.circle.fill",
                             backgroundColor: Color(red: 0.36, green: 0.18, blue: 0.46)
                         ) {
-                            pendingActionMessage = "Correction flow will connect to /correct in the next step."
+                            showCamera = true
                         }
                     }
 
@@ -80,21 +79,6 @@ struct ContentView: View {
             .navigationDestination(isPresented: $showCamera) {
                 CameraView()
             }
-            .alert(
-                "Coming Next",
-                isPresented: Binding(
-                    get: { pendingActionMessage != nil },
-                    set: { if !$0 { pendingActionMessage = nil } }
-                ),
-                actions: {
-                    Button("OK", role: .cancel) {
-                        pendingActionMessage = nil
-                    }
-                },
-                message: {
-                    Text(pendingActionMessage ?? "")
-                }
-            )
         }
     }
 }
