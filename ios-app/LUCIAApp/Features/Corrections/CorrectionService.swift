@@ -14,11 +14,11 @@ struct CorrectionResponse: Decodable, Equatable {
 
 final class CorrectionService {
     private let session: URLSession
-    private let baseURL: URL
+    private let baseURLOverride: URL?
 
-    init(session: URLSession = .shared, baseURL: URL = AppConstants.apiBaseURL) {
+    init(session: URLSession = .shared, baseURL: URL? = nil) {
         self.session = session
-        self.baseURL = baseURL
+        self.baseURLOverride = baseURL
     }
 
     func submit(detectionID: Int, newLabel: String) async throws -> CorrectionResponse {
@@ -28,6 +28,7 @@ final class CorrectionService {
             URLQueryItem(name: "new_label", value: newLabel)
         ]
 
+        let baseURL = baseURLOverride ?? AppSettingsStore.apiBaseURL
         var request = URLRequest(url: baseURL.appendingPathComponent("correct"))
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")

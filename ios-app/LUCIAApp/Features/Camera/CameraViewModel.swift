@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import UIKit
 
 @MainActor
 final class CameraViewModel: ObservableObject {
@@ -68,8 +69,10 @@ final class CameraViewModel: ObservableObject {
         do {
             let imageData = try await service.capturePhoto()
             detectionResult = try await APIClient.shared.detect(imageData: imageData)
+            provideHaptic(.success)
         } catch {
             captureError = error.localizedDescription
+            provideHaptic(.error)
         }
 
         isCapturing = false
@@ -82,7 +85,7 @@ final class CameraViewModel: ObservableObject {
 
             while !Task.isCancelled {
                 await self?.requestGuidance()
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: .seconds(AppSettingsStore.guidanceInterval))
             }
         }
     }
@@ -102,5 +105,10 @@ final class CameraViewModel: ObservableObject {
             guidanceObject = nil
             isGuidanceAvailable = false
         }
+    }
+
+    private func provideHaptic(_ type: UINotificationFeedbackGenerator.FeedbackType) {
+        guard AppSettingsStore.hapticsEnabled else { return }
+        UINotificationFeedbackGenerator().notificationOccurred(type)
     }
 }

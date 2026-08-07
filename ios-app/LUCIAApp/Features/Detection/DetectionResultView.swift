@@ -8,19 +8,12 @@ struct DetectionResultView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: result.objectDetected == nil
-                    ? [Color.orange.opacity(0.22), Color.white]
-                    : [Color.green.opacity(0.25), Color.white],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            Color.white.ignoresSafeArea()
 
             VStack(spacing: 24) {
                 Image(systemName: result.objectDetected == nil ? "questionmark.circle.fill" : "checkmark.circle.fill")
                     .font(.system(size: 88))
-                    .foregroundStyle(result.objectDetected == nil ? .orange : .green)
+                    .foregroundStyle(.black)
 
                 Text(result.displayLabel.capitalized)
                     .font(.system(size: 42, weight: .black, design: .rounded))
@@ -29,13 +22,13 @@ struct DetectionResultView: View {
                 if let confidenceText = result.confidenceText {
                     Text(confidenceText)
                         .font(.title2.weight(.bold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.black.opacity(0.65))
                 }
 
                 Text(result.message)
                     .font(.title3.weight(.medium))
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.black.opacity(0.65))
                     .padding(.horizontal)
 
                 Spacer()
@@ -49,7 +42,7 @@ struct DetectionResultView: View {
                                 .font(.title3.weight(.bold))
                                 .frame(maxWidth: .infinity, minHeight: 64)
                                 .foregroundStyle(.white)
-                                .background(.blue, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                                .background(.black, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                         }
                         .accessibilityHint("Choose the correct object label")
                     }

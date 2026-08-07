@@ -4,11 +4,11 @@ final class APIClient {
     static let shared = APIClient()
 
     private let session: URLSession
-    private let baseURL: URL
+    private let baseURLOverride: URL?
 
-    init(session: URLSession = .shared, baseURL: URL = AppConstants.apiBaseURL) {
+    init(session: URLSession = .shared, baseURL: URL? = nil) {
         self.session = session
-        self.baseURL = baseURL
+        self.baseURLOverride = baseURL
     }
 
     func detect(imageData: Data) async throws -> DetectionResult {
@@ -25,6 +25,7 @@ final class APIClient {
         as responseType: Response.Type
     ) async throws -> Response {
         let boundary = "Boundary-\(UUID().uuidString)"
+        let baseURL = baseURLOverride ?? AppSettingsStore.apiBaseURL
         var request = URLRequest(url: baseURL.appendingPathComponent(path))
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
