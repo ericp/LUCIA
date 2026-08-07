@@ -71,6 +71,16 @@ struct ContentView: View {
             .navigationDestination(isPresented: $showCamera) {
                 CameraView()
             }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        SettingsView()
+                    } label: {
+                        Label("Settings", systemImage: "gearshape.fill")
+                    }
+                    .foregroundStyle(.black)
+                }
+            }
         }
     }
 }

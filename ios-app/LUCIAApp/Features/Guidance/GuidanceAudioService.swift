@@ -14,12 +14,17 @@ final class GuidanceAudioService: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     func speak(_ message: String) {
+        guard AppSettingsStore.voiceGuidanceEnabled else {
+            stop()
+            return
+        }
+
         let now = Date()
         guard !synthesizer.isSpeaking else { return }
         guard message != lastMessage || now.timeIntervalSince(lastSpokenAt) >= minimumRepeatInterval else { return }
 
         let utterance = AVSpeechUtterance(string: message)
-        utterance.rate = 0.48
+        utterance.rate = AppSettingsStore.speechRate
         utterance.volume = 1
         synthesizer.speak(utterance)
         lastMessage = message
