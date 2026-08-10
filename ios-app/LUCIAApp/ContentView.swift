@@ -3,87 +3,62 @@ import SwiftUI
 struct ContentView: View {
     @State private var showCamera = false
 
+    private let accentGradient = LinearGradient(
+        colors: [
+            Color(red: 0.55, green: 0.18, blue: 0.82),
+            Color(red: 0.96, green: 0.18, blue: 0.58)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
     var body: some View {
         NavigationStack {
             ZStack {
                 Color.white.ignoresSafeArea()
 
-                VStack(alignment: .leading, spacing: 28) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("LUCIA")
-                            .font(.system(size: 42, weight: .black, design: .rounded))
-                            .foregroundStyle(Color.black)
-
-                        Text("Open the camera quickly and use large actions for guidance, capture, and corrections.")
-                            .font(.title3.weight(.medium))
-                            .foregroundStyle(Color.black.opacity(0.78))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    VStack(spacing: 18) {
-                        LargeActionButton(
-                            title: "Open Camera",
-                            subtitle: "Primary access for live guidance",
-                            systemImage: "camera.fill",
-                            backgroundColor: .black
-                        ) {
-                            showCamera = true
-                        }
-
-                        LargeActionButton(
-                            title: "Capture Image",
-                            subtitle: "Send a photo to the detection API",
-                            systemImage: "camera.aperture",
-                            backgroundColor: .black
-                        ) {
-                            showCamera = true
-                        }
-
-                        LargeActionButton(
-                            title: "Start Guidance",
-                            subtitle: "Use voice and hints while aiming",
-                            systemImage: "speaker.wave.3.fill",
-                            backgroundColor: .black
-                        ) {
-                            showCamera = true
-                        }
-
-                        LargeActionButton(
-                            title: "Send Correction",
-                            subtitle: "Capture an object, then correct its label",
-                            systemImage: "pencil.circle.fill",
-                            backgroundColor: .black
-                        ) {
-                            showCamera = true
-                        }
-                    }
-
-                    Text("Designed with high-contrast, oversized touch targets for quick access.")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(Color.black.opacity(0.65))
-                        .padding(.top, 6)
+                VStack {
+                    Text("LUCIA")
+                        .font(.system(size: 48, weight: .black, design: .rounded))
+                        .foregroundStyle(accentGradient)
+                        .accessibilityAddTraits(.isHeader)
+                        .padding(.top, 28)
 
                     Spacer()
                 }
-                .padding(.horizontal, 24)
-                .padding(.vertical, 28)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                Button {
+                    showCamera = true
+                } label: {
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 82, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 210, height: 210)
+                        .background(accentGradient, in: Circle())
+                        .overlay(
+                            Circle()
+                                .stroke(.white.opacity(0.7), lineWidth: 4)
+                                .padding(8)
+                        )
+                        .shadow(
+                            color: Color(red: 0.78, green: 0.16, blue: 0.70).opacity(0.35),
+                            radius: 24,
+                            x: 0,
+                            y: 14
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open camera")
+                .accessibilityHint("Starts scanning for nearby objects")
             }
             .navigationDestination(isPresented: $showCamera) {
                 CameraView()
             }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink {
-                        SettingsView()
-                    } label: {
-                        Label("Settings", systemImage: "gearshape.fill")
-                    }
-                    .foregroundStyle(.black)
-                }
-            }
         }
     }
 }
+
 #Preview {
     ContentView()
 }
