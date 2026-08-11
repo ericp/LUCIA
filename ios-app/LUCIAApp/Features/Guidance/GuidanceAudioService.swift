@@ -1,8 +1,9 @@
 import AVFoundation
+import Combine
 import Foundation
 
 @MainActor
-final class GuidanceAudioService: NSObject, AVSpeechSynthesizerDelegate {
+final class GuidanceAudioService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     private let synthesizer = AVSpeechSynthesizer()
     private var lastMessage: String?
     private var lastSpokenAt = Date.distantPast
@@ -13,8 +14,8 @@ final class GuidanceAudioService: NSObject, AVSpeechSynthesizerDelegate {
         synthesizer.delegate = self
     }
 
-    func speak(_ message: String) {
-        guard AppSettingsStore.voiceGuidanceEnabled else {
+    func speak(_ message: String, respectsVoiceSetting: Bool = true) {
+        guard !respectsVoiceSetting || AppSettingsStore.voiceGuidanceEnabled else {
             stop()
             return
         }
@@ -33,5 +34,7 @@ final class GuidanceAudioService: NSObject, AVSpeechSynthesizerDelegate {
 
     func stop() {
         synthesizer.stopSpeaking(at: .immediate)
+        lastMessage = nil
+        lastSpokenAt = .distantPast
     }
 }
