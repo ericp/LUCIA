@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var showCamera = false
+    @StateObject private var welcomeAudioService = GuidanceAudioService()
 
     private let accentGradient = LinearGradient(
         colors: [
@@ -29,6 +30,7 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 Button {
+                    welcomeAudioService.stop()
                     showCamera = true
                 } label: {
                     Image(systemName: "camera.fill")
@@ -54,6 +56,15 @@ struct ContentView: View {
             }
             .navigationDestination(isPresented: $showCamera) {
                 CameraView()
+            }
+            .onAppear {
+                welcomeAudioService.speak(
+                    "Welcome to LUCIA. Tap the center of the screen to start live object recognition.",
+                    respectsVoiceSetting: false
+                )
+            }
+            .onDisappear {
+                welcomeAudioService.stop()
             }
         }
     }
