@@ -2,7 +2,6 @@ import SwiftUI
 
 struct GuidanceView: View {
     let message: String
-    let detectedObject: String?
     let isAvailable: Bool
 
     var body: some View {
@@ -13,11 +12,6 @@ struct GuidanceView: View {
                     .font(.headline.weight(.bold))
             }
 
-            if let detectedObject {
-                Text("Detected: \(detectedObject.capitalized)")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.82))
-            }
         }
         .multilineTextAlignment(.center)
         .foregroundStyle(.white)

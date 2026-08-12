@@ -104,7 +104,6 @@ struct CameraView: View {
     private var guidanceOverlay: some View {
         GuidanceView(
             message: viewModel.guidanceMessage,
-            detectedObject: viewModel.guidanceObject,
             isAvailable: viewModel.isGuidanceAvailable
         )
     }
@@ -135,8 +134,10 @@ struct CameraView: View {
                 x: 0,
                 y: 8
             )
+            .saturation(viewModel.canCaptureForMoreDetail ? 1 : 0)
+            .opacity(viewModel.canCaptureForMoreDetail ? 1 : 0.42)
         }
-        .disabled(viewModel.state != .ready || viewModel.isCapturing)
+        .disabled(!viewModel.canCaptureForMoreDetail)
         .accessibilityLabel("Capture for more detail")
         .accessibilityHint("Takes a detailed photo and identifies the object")
     }
