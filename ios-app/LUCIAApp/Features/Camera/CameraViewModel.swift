@@ -16,11 +16,18 @@ final class CameraViewModel: ObservableObject {
     @Published private(set) var isCapturing = false
     @Published var detectionResult: DetectionResult?
     @Published var captureError: String?
-    @Published private(set) var guidanceMessage = "Starting live guidance…"
+    @Published private(set) var guidanceMessage = "Preparing live guidance…"
     @Published private(set) var guidanceObject: String?
     @Published private(set) var isGuidanceAvailable = true
 
     let session: AVCaptureSession
+
+    var canCaptureForMoreDetail: Bool {
+        state == .ready &&
+            isGuidanceAvailable &&
+            guidanceObject != nil &&
+            !isCapturing
+    }
 
     private let service: CameraService
     private let audioService = GuidanceAudioService()
@@ -41,11 +48,23 @@ final class CameraViewModel: ObservableObject {
             if accessGranted {
                 state = .ready
                 message = "Camera ready"
+                guidanceMessage = "Camera ready. Tap the bottom to capture more detail."
                 service.startRunning()
+                audioService.speak(
+                    "Camera ready. Tap the bottom to capture more detail.",
+                    respectsVoiceSetting: false
+                )
                 startGuidance()
             } else {
                 state = .denied
                 message = "Camera permission was denied."
+                guidanceMessage = "Camera access is required."
+                guidanceObject = nil
+                isGuidanceAvailable = false
+                audioService.speak(
+                    "Camera access is required. Please allow camera access in Settings.",
+                    respectsVoiceSetting: false
+                )
             }
         } catch {
             state = .unavailable
@@ -62,7 +81,7 @@ final class CameraViewModel: ObservableObject {
     }
 
     func capture() async {
-        guard state == .ready, !isCapturing else { return }
+        guard canCaptureForMoreDetail else { return }
         isCapturing = true
         captureError = nil
 

@@ -6,8 +6,9 @@ struct ContentView: View {
 
     private let accentGradient = LinearGradient(
         colors: [
-            Color(red: 0.55, green: 0.18, blue: 0.82),
-            Color(red: 0.96, green: 0.18, blue: 0.58)
+            Color(red: 0.12, green: 0.86, blue: 0.70),
+            Color(red: 0.08, green: 0.75, blue: 0.80),
+            Color(red: 0.18, green: 0.55, blue: 0.98)
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
@@ -44,7 +45,7 @@ struct ContentView: View {
                                 .padding(8)
                         )
                         .shadow(
-                            color: Color(red: 0.78, green: 0.16, blue: 0.70).opacity(0.35),
+                            color: Color(red: 0.08, green: 0.72, blue: 0.76).opacity(0.32),
                             radius: 24,
                             x: 0,
                             y: 14
