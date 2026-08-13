@@ -54,13 +54,45 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Open camera")
                 .accessibilityHint("Starts scanning for nearby objects")
+
+                VStack {
+                    Spacer()
+
+                    Button {
+                        welcomeAudioService.stop()
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "clock.arrow.circlepath")
+                            Text("Scanned Objects")
+                        }
+                        .font(.system(size: 20, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 76)
+                        .background(accentGradient, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                .stroke(.white.opacity(0.65), lineWidth: 2)
+                        )
+                        .shadow(
+                            color: Color(red: 0.08, green: 0.72, blue: 0.76).opacity(0.28),
+                            radius: 14,
+                            x: 0,
+                            y: 8
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Scanned Objects")
+                    .accessibilityHint("Opens your previously scanned objects")
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 24)
+                }
             }
             .navigationDestination(isPresented: $showCamera) {
                 CameraView()
             }
             .onAppear {
                 welcomeAudioService.speak(
-                    "Welcome to LUCIA. Tap the center of the screen to start live object recognition.",
+                    "Welcome to LUCIA. Tap the center of the screen to start live object recognition. Tap the bottom of the screen to check your scanned objects.",
                     respectsVoiceSetting: false
                 )
             }
