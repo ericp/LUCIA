@@ -160,3 +160,6 @@ struct CameraView: View {
         }
     }
 }
+#Preview {
+    CameraView()
+}
