@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var showCamera = false
+    @State private var showScannedObjects = false
     @StateObject private var welcomeAudioService = GuidanceAudioService()
 
     private let accentGradient = LinearGradient(
@@ -60,6 +61,7 @@ struct ContentView: View {
 
                     Button {
                         welcomeAudioService.stop()
+                        showScannedObjects = true
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "clock.arrow.circlepath")
@@ -89,6 +91,9 @@ struct ContentView: View {
             }
             .navigationDestination(isPresented: $showCamera) {
                 CameraView()
+            }
+            .navigationDestination(isPresented: $showScannedObjects) {
+                ObjectDetailsView()
             }
             .onAppear {
                 welcomeAudioService.speak(
