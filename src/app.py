@@ -1,6 +1,10 @@
 # LUCIA src.app:app --reload
-from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import JSONResponse, RedirectResponse
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import cv2
@@ -11,13 +15,14 @@ import shutil
 # Import detection logic, text-to-speech, and database models
 from src.detect import detect_objects_in_frame
 from src.tts import speak
-from src.database import SessionLocal, Detection, UserLabel
+from src.database import PROJECT_ROOT, SessionLocal, Detection, UserLabel
 
 app = FastAPI()
 
-#  Serve static frontend at /web (NOT at "/") 
-if os.path.isdir("frontend"):
-    app.mount("/web", StaticFiles(directory="frontend", html=True), name="frontend")
+# Serve static frontend at /web (NOT at "/")
+FRONTEND_DIR = PROJECT_ROOT / "frontend"
+if FRONTEND_DIR.is_dir():
+    app.mount("/web", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
 
 @app.get("/")
 def root():
@@ -37,11 +42,11 @@ app.add_middleware(
 
 # Paths
 
-IMAGES_DIR = "data/images"
-CORRECTED_IMAGES_DIR = "data/user_labels"
+IMAGES_DIR = PROJECT_ROOT / "data" / "images"
+CORRECTED_IMAGES_DIR = PROJECT_ROOT / "data" / "user_labels"
 
-os.makedirs(IMAGES_DIR, exist_ok=True)
-os.makedirs(CORRECTED_IMAGES_DIR, exist_ok=True)
+IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+CORRECTED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # POST /detect
@@ -71,10 +76,10 @@ async def detect_object(file: UploadFile = File(...)):
 
         # Final name with leading zeros: 003.jpg, 010.jpg, ...
         final_name = f"{detection_id:03d}.jpg"
-        image_save_path = os.path.join(IMAGES_DIR, final_name)
+        image_save_path = IMAGES_DIR / final_name
 
         # Save the image with the final name
-        with open(image_save_path, "wb") as f:
+        with image_save_path.open("wb") as f:
             f.write(contents)
 
         # Update filename in the DB
@@ -113,6 +118,82 @@ async def detect_object(file: UploadFile = File(...)):
                 "hints": hints,
             }
         )
+
+
+# GET /detections
+
+@app.get("/detections")
+def list_detections():
+    """Return saved scans newest-first for the iOS scanned-objects screen."""
+    session = SessionLocal()
+    try:
+        detections = (
+            session.query(Detection)
+            .order_by(Detection.scanned_at.desc(), Detection.id.desc())
+            .all()
+        )
+        corrected_labels = {}
+        for correction in session.query(UserLabel).order_by(UserLabel.id.asc()).all():
+            corrected_labels[correction.detection_id] = correction.label
+
+        response = []
+        for detection in detections:
+            corrected_label = corrected_labels.get(detection.id)
+            scanned_at = detection.scanned_at or datetime.now(timezone.utc)
+            if scanned_at.tzinfo is None:
+                scanned_at = scanned_at.replace(tzinfo=timezone.utc)
+
+            image_path = _image_path_for(detection)
+            if image_path is None:
+                continue
+            response.append(
+                {
+                    "id": detection.id,
+                    "label": corrected_label or detection.label,
+                    "original_label": detection.label,
+                    "corrected_label": corrected_label,
+                    "confidence": detection.confidence,
+                    "scanned_at": scanned_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "image_url": f"/detections/{detection.id}/image",
+                    "details": None,
+                }
+            )
+        return response
+    finally:
+        session.close()
+
+
+@app.get("/detections/{detection_id}/image")
+def detection_image(detection_id: int):
+    """Return the original captured image for a saved detection."""
+    session = SessionLocal()
+    try:
+        detection = (
+            session.query(Detection).filter(Detection.id == detection_id).first()
+        )
+        if not detection:
+            raise HTTPException(status_code=404, detail="Detection not found")
+
+        image_path = _image_path_for(detection)
+        if image_path is None:
+            raise HTTPException(status_code=404, detail="Detection image not found")
+
+        return FileResponse(image_path, media_type="image/jpeg", filename=image_path.name)
+    finally:
+        session.close()
+
+
+def _image_path_for(detection: Detection) -> Optional[Path]:
+    if not detection.filename:
+        return None
+
+    images_root = IMAGES_DIR.resolve()
+    candidate = (images_root / detection.filename).resolve()
+    try:
+        candidate.relative_to(images_root)
+    except ValueError:
+        return None
+    return candidate if candidate.is_file() else None
 
 
 # POST /guide
@@ -164,10 +245,10 @@ async def correct_label(id: int = Form(...), new_label: str = Form(...)):
         session.commit()
 
         # Copy original image to corrections folder with label prefix
-        original_path = os.path.join(IMAGES_DIR, detection.filename) 
-        if os.path.exists(original_path):
+        original_path = IMAGES_DIR / detection.filename
+        if original_path.exists():
             corrected_filename = f"{new_label}_{detection.filename}"
-            corrected_path = os.path.join(CORRECTED_IMAGES_DIR, corrected_filename)
+            corrected_path = CORRECTED_IMAGES_DIR / corrected_filename
             shutil.copy(original_path, corrected_path)
 
         session.close()
