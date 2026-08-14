@@ -19,6 +19,31 @@ final class APIClient {
         try await upload(imageData: imageData, path: "guide", as: GuidanceResult.self)
     }
 
+    func fetchDetections() async throws -> [ScannedObject] {
+        let baseURL = baseURLOverride ?? AppSettingsStore.apiBaseURL
+        var request = URLRequest(url: baseURL.appendingPathComponent("detections"))
+        request.httpMethod = "GET"
+        request.timeoutInterval = 15
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw APIError.server(statusCode: httpResponse.statusCode)
+        }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        do {
+            return try decoder
+                .decode([ScannedObjectResponse].self, from: data)
+                .map { $0.scannedObject(baseURL: baseURL) }
+        } catch {
+            throw APIError.invalidPayload
+        }
+    }
+
     private func upload<Response: Decodable>(
         imageData: Data,
         path: String,
@@ -56,8 +81,8 @@ enum APIError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidResponse: return "The server returned an invalid response."
-        case .server(let statusCode): return "Detection failed with server error \(statusCode)."
-        case .invalidPayload: return "The detection response could not be read."
+        case .server(let statusCode): return "The server returned error \(statusCode)."
+        case .invalidPayload: return "The server response could not be read."
         }
     }
 }

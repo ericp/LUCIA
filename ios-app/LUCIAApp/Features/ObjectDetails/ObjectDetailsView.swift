@@ -1,9 +1,9 @@
 import SwiftUI
 
 struct ObjectDetailsView: View {
-    let objects: [ScannedObject]
-
+    @StateObject private var viewModel: ObjectDetailsViewModel
     @StateObject private var audioService = GuidanceAudioService()
+    @State private var hasAnnouncedResults = false
 
     private let accentGradient = LinearGradient(
         colors: [
@@ -15,15 +15,21 @@ struct ObjectDetailsView: View {
         endPoint: .bottomTrailing
     )
 
-    init(objects: [ScannedObject] = []) {
-        self.objects = objects
+    init(objects: [ScannedObject]? = nil) {
+        _viewModel = StateObject(
+            wrappedValue: ObjectDetailsViewModel(initialObjects: objects)
+        )
     }
 
     var body: some View {
         VStack(spacing: 18) {
             askQuestionButton
 
-            if objects.isEmpty {
+            if viewModel.isLoading {
+                loadingState
+            } else if viewModel.errorMessage != nil {
+                errorState
+            } else if viewModel.objects.isEmpty {
                 emptyState
             } else {
                 objectHistory
@@ -35,11 +41,63 @@ struct ObjectDetailsView: View {
         .navigationTitle("Scanned Objects")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            audioService.speak(spokenIntroduction, respectsVoiceSetting: false)
+            audioService.speak(spokenInstruction, respectsVoiceSetting: false)
+        }
+        .task {
+            await loadObjects()
         }
         .onDisappear {
             audioService.stop()
         }
+    }
+
+    private var loadingState: some View {
+        VStack(spacing: 18) {
+            Spacer()
+            ProgressView()
+                .controlSize(.large)
+                .tint(Color(red: 0.08, green: 0.75, blue: 0.80))
+            Text("Loading scanned objects…")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.gray)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var errorState: some View {
+        VStack(spacing: 18) {
+            Spacer()
+
+            Image(systemName: "wifi.exclamationmark")
+                .font(.system(size: 58, weight: .medium))
+                .foregroundStyle(accentGradient)
+
+            Text("Couldn’t load scanned objects")
+                .font(.title2.weight(.bold))
+
+            Text("Make sure the LUCIA server is running and this iPhone can reach it.")
+                .font(.body.weight(.medium))
+                .foregroundStyle(.gray)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+
+            Button("Try again") {
+                Task {
+                    hasAnnouncedResults = false
+                    await loadObjects(forceRefresh: true)
+                }
+            }
+            .font(.headline.weight(.bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 14)
+            .background(accentGradient, in: Capsule())
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var askQuestionButton: some View {
@@ -95,7 +153,7 @@ struct ObjectDetailsView: View {
     private var objectHistory: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 22) {
-                ForEach(objects.groupedByDay) { section in
+                ForEach(viewModel.objects.groupedByDay) { section in
                     VStack(alignment: .leading, spacing: 10) {
                         Text(Self.displayDate(section.date))
                             .font(.subheadline.weight(.semibold))
@@ -109,6 +167,10 @@ struct ObjectDetailsView: View {
                 }
             }
             .padding(.vertical, 4)
+        }
+        .refreshable {
+            hasAnnouncedResults = false
+            await loadObjects(forceRefresh: true)
         }
     }
 
@@ -131,7 +193,7 @@ struct ObjectDetailsView: View {
                     .font(.headline.weight(.bold))
                     .foregroundStyle(.black)
 
-                Text(object.details?.isEmpty == false ? object.details! : "Details not available yet…")
+                Text(detailText(for: object))
                     .font(.subheadline)
                     .foregroundStyle(.gray)
                     .lineLimit(2)
@@ -150,20 +212,42 @@ struct ObjectDetailsView: View {
                 .stroke(.black.opacity(0.08), lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(object.name). \(object.details ?? "Details not available yet")")
+        .accessibilityLabel("\(object.name). \(detailText(for: object))")
     }
 
-    private var spokenIntroduction: String {
-        let instruction = "Tap the top of the screen to ask any question about the products you scanned."
-        guard !objects.isEmpty else {
-            return instruction + " You have no scanned objects yet."
+    private var spokenInstruction: String {
+        "Tap the top of the screen to ask any question about the products you scanned."
+    }
+
+    private var spokenResults: String {
+        guard viewModel.errorMessage == nil else {
+            return "Scanned objects could not be loaded."
+        }
+        guard !viewModel.objects.isEmpty else {
+            return "You have no scanned objects yet."
         }
 
-        let summaries = objects.groupedByDay.map { section in
+        return viewModel.objects.groupedByDay.map { section in
             let names = section.objects.map(\.name).joined(separator: ", ")
             return "On \(Self.spokenDate(section.date)), you scanned: \(names)."
+        }.joined(separator: " ")
+    }
+
+    private func detailText(for object: ScannedObject) -> String {
+        let confidence = object.confidence.map {
+            "\(Int(($0 * 100).rounded()))% confidence"
         }
-        return ([instruction] + summaries).joined(separator: " ")
+        let details = object.details?.isEmpty == false
+            ? object.details
+            : "Details not available yet…"
+        return [confidence, details].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    private func loadObjects(forceRefresh: Bool = false) async {
+        await viewModel.load(forceRefresh: forceRefresh)
+        guard !Task.isCancelled, !viewModel.isLoading, !hasAnnouncedResults else { return }
+        hasAnnouncedResults = true
+        audioService.enqueue(spokenResults, respectsVoiceSetting: false)
     }
 
     private static func displayDate(_ date: Date) -> String {
