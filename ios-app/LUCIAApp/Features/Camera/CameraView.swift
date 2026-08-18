@@ -89,16 +89,39 @@ struct CameraView: View {
     }
 
     private var topOverlay: some View {
-        HStack {
-            Label("Live Preview", systemImage: "viewfinder")
-                .font(.headline.weight(.bold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 12)
-                .background(.black.opacity(0.45), in: Capsule())
+        VStack(spacing: 10) {
+            HStack {
+                Label("Live Preview", systemImage: viewModel.mode.systemImage)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(.white)
 
-            Spacer()
+                Spacer()
+            }
+
+            HStack(spacing: 8) {
+                ForEach(CameraMode.allCases) { mode in
+                    Button {
+                        viewModel.selectMode(mode)
+                    } label: {
+                        Label(mode.title, systemImage: mode.systemImage)
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(viewModel.mode == mode ? .black : .white)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(
+                                viewModel.mode == mode
+                                    ? Color.white
+                                    : Color.black.opacity(0.55),
+                                in: Capsule()
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(mode.title) mode")
+                    .accessibilityValue(viewModel.mode == mode ? "Selected" : "Not selected")
+                    .accessibilityHint("Changes how the live camera analyzes the scene")
+                }
+            }
         }
+        .padding(.horizontal, 4)
     }
 
     private var guidanceOverlay: some View {
@@ -118,7 +141,7 @@ struct CameraView: View {
                 } else {
                     Image(systemName: "camera.fill")
                 }
-                Text(viewModel.isCapturing ? "Detecting…" : "Capture for more detail")
+                Text(viewModel.captureButtonTitle)
             }
             .font(.system(size: 20, weight: .heavy, design: .rounded))
             .foregroundStyle(.white)
@@ -138,8 +161,12 @@ struct CameraView: View {
             .opacity(viewModel.canCaptureForMoreDetail ? 1 : 0.42)
         }
         .disabled(!viewModel.canCaptureForMoreDetail)
-        .accessibilityLabel("Capture for more detail")
-        .accessibilityHint("Takes a detailed photo and identifies the object")
+        .accessibilityLabel(viewModel.mode.captureTitle)
+        .accessibilityHint(
+            viewModel.mode == .text
+                ? "Takes a photo and reads its visible text accurately"
+                : "Takes a detailed photo, identifies the object, and reads visible text"
+        )
     }
 
     private func cameraMessage(title: String, message: String) -> some View {

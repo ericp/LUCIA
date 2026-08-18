@@ -3,6 +3,7 @@ import SwiftUI
 struct DetectionResultView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showCorrection = false
+    @StateObject private var audioService = GuidanceAudioService()
 
     let result: DetectionResult
 
@@ -11,7 +12,7 @@ struct DetectionResultView: View {
             Color.white.ignoresSafeArea()
 
             VStack(spacing: 24) {
-                Image(systemName: result.objectDetected == nil ? "questionmark.circle.fill" : "checkmark.circle.fill")
+                Image(systemName: resultIcon)
                     .font(.system(size: 88))
                     .foregroundStyle(.black)
 
@@ -25,17 +26,47 @@ struct DetectionResultView: View {
                         .foregroundStyle(.black.opacity(0.65))
                 }
 
-                Text(result.message)
+                Text(result.displayMessage)
                     .font(.title3.weight(.medium))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.black.opacity(0.65))
                     .padding(.horizontal)
 
+                if result.hasRecognizedText {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("Recognized Text", systemImage: "text.viewfinder")
+                            .font(.headline.weight(.bold))
+
+                        ScrollView {
+                            Text(result.recognizedTextString)
+                                .font(.body.weight(.medium))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .textSelection(.enabled)
+                        }
+                        .frame(maxHeight: 180)
+
+                        Button {
+                            audioService.stop()
+                        } label: {
+                            Label("Stop reading", systemImage: "speaker.slash.fill")
+                                .font(.subheadline.weight(.bold))
+                        }
+                        .foregroundStyle(.black)
+                    }
+                    .padding(18)
+                    .background(
+                        Color.black.opacity(0.05),
+                        in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    )
+                    .accessibilityElement(children: .contain)
+                }
+
                 Spacer()
 
                 VStack(spacing: 14) {
-                    if result.id != nil {
+                    if result.id != nil && result.objectDetected != nil {
                         Button {
+                            audioService.stop()
                             showCorrection = true
                         } label: {
                             Label("Correct Result", systemImage: "pencil.circle.fill")
@@ -48,6 +79,7 @@ struct DetectionResultView: View {
                     }
 
                     Button {
+                        audioService.stop()
                         dismiss()
                     } label: {
                         Label("Try Again", systemImage: "camera.fill")
@@ -64,6 +96,12 @@ struct DetectionResultView: View {
         }
         .navigationTitle("Detection Result")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            audioService.speak(result.spokenSummary, respectsVoiceSetting: false)
+        }
+        .onDisappear {
+            audioService.stop()
+        }
         .sheet(isPresented: $showCorrection) {
             if let detectionID = result.id {
                 CorrectionView(
@@ -72,5 +110,11 @@ struct DetectionResultView: View {
                 )
             }
         }
+    }
+
+    private var resultIcon: String {
+        if result.objectDetected != nil { return "checkmark.circle.fill" }
+        if result.hasRecognizedText { return "text.viewfinder" }
+        return "questionmark.circle.fill"
     }
 }
