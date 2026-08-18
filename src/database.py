@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 
-from sqlalchemy import Column, DateTime, Float, Integer, String, create_engine, inspect, text
+from sqlalchemy import Column, DateTime, Float, Integer, String, Text, create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 
@@ -29,6 +29,8 @@ class Detection(Base):
     label = Column(String, index=True)
     confidence = Column(Float)
     scanned_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    recognized_text = Column(Text, nullable=True)
+    text_confidence = Column(Float, nullable=True)
 
 
 class UserLabel(Base):
@@ -39,38 +41,48 @@ class UserLabel(Base):
     label = Column(String, index=True)
 
 
-def _add_scanned_at_to_existing_database() -> None:
-    """Add and backfill scan dates without deleting existing detection records."""
+def _migrate_existing_database() -> None:
+    """Add new detection metadata without deleting existing records."""
     columns = {column["name"] for column in inspect(engine).get_columns("detections")}
-    if "scanned_at" in columns:
+    missing_columns = {"scanned_at", "recognized_text", "text_confidence"} - columns
+    if not missing_columns:
         return
 
-    images_dir = PROJECT_ROOT / "data" / "images"
-    database_timestamp = datetime.fromtimestamp(DB_PATH.stat().st_mtime, timezone.utc)
-
     with engine.begin() as connection:
-        connection.execute(text("ALTER TABLE detections ADD COLUMN scanned_at DATETIME"))
-        records = connection.execute(text("SELECT id, filename FROM detections")).mappings()
-
-        for record in records:
-            image_path = images_dir / Path(record["filename"] or "").name
-            timestamp = (
-                datetime.fromtimestamp(image_path.stat().st_mtime, timezone.utc)
-                if image_path.is_file()
-                else database_timestamp
+        if "scanned_at" in missing_columns:
+            images_dir = PROJECT_ROOT / "data" / "images"
+            database_timestamp = datetime.fromtimestamp(
+                DB_PATH.stat().st_mtime,
+                timezone.utc,
             )
+            connection.execute(text("ALTER TABLE detections ADD COLUMN scanned_at DATETIME"))
+            records = connection.execute(text("SELECT id, filename FROM detections")).mappings()
+
+            for record in records:
+                image_path = images_dir / Path(record["filename"] or "").name
+                timestamp = (
+                    datetime.fromtimestamp(image_path.stat().st_mtime, timezone.utc)
+                    if image_path.is_file()
+                    else database_timestamp
+                )
+                connection.execute(
+                    text("UPDATE detections SET scanned_at = :scanned_at WHERE id = :id"),
+                    {"scanned_at": timestamp.replace(tzinfo=None), "id": record["id"]},
+                )
+
             connection.execute(
-                text("UPDATE detections SET scanned_at = :scanned_at WHERE id = :id"),
-                {"scanned_at": timestamp.replace(tzinfo=None), "id": record["id"]},
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_detections_scanned_at "
+                    "ON detections (scanned_at)"
+                )
             )
 
-        connection.execute(
-            text(
-                "CREATE INDEX IF NOT EXISTS ix_detections_scanned_at "
-                "ON detections (scanned_at)"
-            )
-        )
+        if "recognized_text" in missing_columns:
+            connection.execute(text("ALTER TABLE detections ADD COLUMN recognized_text TEXT"))
+
+        if "text_confidence" in missing_columns:
+            connection.execute(text("ALTER TABLE detections ADD COLUMN text_confidence FLOAT"))
 
 
 Base.metadata.create_all(bind=engine)
-_add_scanned_at_to_existing_database()
+_migrate_existing_database()

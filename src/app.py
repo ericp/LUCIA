@@ -7,6 +7,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 import cv2
 import numpy as np
 import os
@@ -18,6 +19,11 @@ from src.tts import speak
 from src.database import PROJECT_ROOT, SessionLocal, Detection, UserLabel
 
 app = FastAPI()
+
+
+class DetectionTextUpdate(BaseModel):
+    recognized_text: str
+    confidence: Optional[float] = None
 
 # Serve static frontend at /web (NOT at "/")
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
@@ -42,8 +48,12 @@ app.add_middleware(
 
 # Paths
 
-IMAGES_DIR = PROJECT_ROOT / "data" / "images"
-CORRECTED_IMAGES_DIR = PROJECT_ROOT / "data" / "user_labels"
+IMAGES_DIR = Path(
+    os.environ.get("LUCIA_IMAGES_DIR", PROJECT_ROOT / "data" / "images")
+).expanduser().resolve()
+CORRECTED_IMAGES_DIR = Path(
+    os.environ.get("LUCIA_CORRECTED_IMAGES_DIR", PROJECT_ROOT / "data" / "user_labels")
+).expanduser().resolve()
 
 IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 CORRECTED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
@@ -120,6 +130,51 @@ async def detect_object(file: UploadFile = File(...)):
         )
 
 
+# POST /text-captures
+
+@app.post("/text-captures")
+async def save_text_capture(
+    file: UploadFile = File(...),
+    recognized_text: str = Form(...),
+    confidence: Optional[float] = Form(None),
+):
+    """Save a captured image when Apple Vision found text but YOLO found no object."""
+    recognized_text = recognized_text.strip()
+    _validate_recognized_text(recognized_text, confidence)
+    if not recognized_text:
+        raise HTTPException(status_code=422, detail="Recognized text is required")
+
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(status_code=422, detail="Captured image is required")
+
+    session = SessionLocal()
+    try:
+        detection = Detection(
+            filename="",
+            label="Visible text",
+            confidence=None,
+            recognized_text=recognized_text,
+            text_confidence=confidence,
+        )
+        session.add(detection)
+        session.commit()
+
+        final_name = f"{detection.id:03d}.jpg"
+        with (IMAGES_DIR / final_name).open("wb") as image_file:
+            image_file.write(contents)
+        detection.filename = final_name
+        session.commit()
+
+        return {
+            "id": detection.id,
+            "recognized_text": detection.recognized_text,
+            "text_confidence": detection.text_confidence,
+        }
+    finally:
+        session.close()
+
+
 # GET /detections
 
 @app.get("/detections")
@@ -155,7 +210,9 @@ def list_detections():
                     "confidence": detection.confidence,
                     "scanned_at": scanned_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
                     "image_url": f"/detections/{detection.id}/image",
-                    "details": None,
+                    "details": detection.recognized_text,
+                    "recognized_text": detection.recognized_text,
+                    "text_confidence": detection.text_confidence,
                 }
             )
         return response
@@ -181,6 +238,43 @@ def detection_image(detection_id: int):
         return FileResponse(image_path, media_type="image/jpeg", filename=image_path.name)
     finally:
         session.close()
+
+
+@app.patch("/detections/{detection_id}/text")
+def update_detection_text(detection_id: int, update: DetectionTextUpdate):
+    """Store Apple Vision OCR output alongside a captured detection."""
+    recognized_text = update.recognized_text.strip()
+    _validate_recognized_text(recognized_text, update.confidence)
+
+    session = SessionLocal()
+    try:
+        detection = (
+            session.query(Detection).filter(Detection.id == detection_id).first()
+        )
+        if not detection:
+            raise HTTPException(status_code=404, detail="Detection not found")
+
+        detection.recognized_text = recognized_text or None
+        detection.text_confidence = update.confidence if recognized_text else None
+        session.commit()
+        return {
+            "status": "updated",
+            "id": detection_id,
+            "recognized_text": detection.recognized_text,
+            "text_confidence": detection.text_confidence,
+        }
+    finally:
+        session.close()
+
+
+def _validate_recognized_text(
+    recognized_text: str,
+    confidence: Optional[float],
+) -> None:
+    if len(recognized_text) > 20_000:
+        raise HTTPException(status_code=422, detail="Recognized text is too long")
+    if confidence is not None and not 0 <= confidence <= 1:
+        raise HTTPException(status_code=422, detail="Confidence must be between 0 and 1")
 
 
 def _image_path_for(detection: Detection) -> Optional[Path]:
