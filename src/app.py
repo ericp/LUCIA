@@ -12,6 +12,7 @@ import cv2
 import numpy as np
 import os
 import shutil
+import uuid
 
 # Import detection logic, text-to-speech, and database models
 from src.detect import detect_objects_in_frame
@@ -77,25 +78,18 @@ async def detect_object(file: UploadFile = File(...)):
     label, confidence, hints = detect_objects_in_frame(frame)
 
     if label:
-        # Create row in DB to get the id
         session = SessionLocal()
-        detection = Detection(filename="", label=label, confidence=confidence)
-        session.add(detection)
-        session.commit()
-        detection_id = detection.id
-
-        # Final name with leading zeros: 003.jpg, 010.jpg, ...
-        final_name = f"{detection_id:03d}.jpg"
-        image_save_path = IMAGES_DIR / final_name
-
-        # Save the image with the final name
-        with image_save_path.open("wb") as f:
-            f.write(contents)
-
-        # Update filename in the DB
-        detection.filename = final_name
-        session.commit()
-        session.close()
+        try:
+            detection = Detection(filename="", label=label, confidence=confidence)
+            _persist_detection_with_image(session, detection, contents)
+            detection_id = detection.id
+        except Exception as error:
+            raise HTTPException(
+                status_code=500,
+                detail="The captured image could not be saved",
+            ) from error
+        finally:
+            session.close()
 
         # Local TTS on Mac
         try:
@@ -157,20 +151,18 @@ async def save_text_capture(
             recognized_text=recognized_text,
             text_confidence=confidence,
         )
-        session.add(detection)
-        session.commit()
-
-        final_name = f"{detection.id:03d}.jpg"
-        with (IMAGES_DIR / final_name).open("wb") as image_file:
-            image_file.write(contents)
-        detection.filename = final_name
-        session.commit()
+        _persist_detection_with_image(session, detection, contents)
 
         return {
             "id": detection.id,
             "recognized_text": detection.recognized_text,
             "text_confidence": detection.text_confidence,
         }
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail="The text capture could not be saved",
+        ) from error
     finally:
         session.close()
 
@@ -275,6 +267,43 @@ def _validate_recognized_text(
         raise HTTPException(status_code=422, detail="Recognized text is too long")
     if confidence is not None and not 0 <= confidence <= 1:
         raise HTTPException(status_code=422, detail="Confidence must be between 0 and 1")
+
+
+def _persist_detection_with_image(session, detection: Detection, contents: bytes) -> None:
+    """Commit a detection and its image together, cleaning up either on failure."""
+    temporary_path = None
+    final_path = None
+    final_file_created = False
+
+    try:
+        session.add(detection)
+        session.flush()
+
+        final_name = f"{detection.id:03d}.jpg"
+        final_path = IMAGES_DIR / final_name
+        temporary_path = IMAGES_DIR / f".{final_name}.{uuid.uuid4().hex}.tmp"
+
+        with temporary_path.open("xb") as image_file:
+            image_file.write(contents)
+            image_file.flush()
+            os.fsync(image_file.fileno())
+
+        # A hard link publishes the complete file atomically and refuses to
+        # overwrite an existing capture with the same database identifier.
+        os.link(temporary_path, final_path)
+        final_file_created = True
+        temporary_path.unlink()
+        temporary_path = None
+
+        detection.filename = final_name
+        session.commit()
+    except Exception:
+        session.rollback()
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+        if final_file_created and final_path is not None:
+            final_path.unlink(missing_ok=True)
+        raise
 
 
 def _image_path_for(detection: Detection) -> Optional[Path]:

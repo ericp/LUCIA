@@ -1,6 +1,9 @@
 import Foundation
 
 enum AppConstants {
+    static let liveTextStableFrameCount = 2
+    static let liveTextSimilarityThreshold = 0.80
+
     // Override API_BASE_URL in the app's Info.plist for a physical iPhone,
     // for example: http://192.168.1.20:8000
     static let apiBaseURL: URL = {

@@ -61,6 +61,20 @@ struct DetectionResultView: View {
                     .accessibilityElement(children: .contain)
                 }
 
+                if let persistenceWarning = result.persistenceWarning {
+                    Label(persistenceWarning, systemImage: "exclamationmark.triangle.fill")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.black)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(18)
+                        .background(
+                            Color.black.opacity(0.08),
+                            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        )
+                        .accessibilityLabel("Save warning. \(persistenceWarning)")
+                }
+
                 Spacer()
 
                 VStack(spacing: 14) {

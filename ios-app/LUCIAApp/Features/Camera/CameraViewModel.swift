@@ -72,6 +72,7 @@ final class CameraViewModel: ObservableObject {
     private var hasStarted = false
     private var guidanceTask: Task<Void, Never>?
     private var liveTextTask: Task<Void, Never>?
+    private var analysisGeneration: UInt = 0
 
     private var liveTextCandidateKey: String?
     private var liveTextCandidateCount = 0
@@ -91,9 +92,12 @@ final class CameraViewModel: ObservableObject {
     func start() async {
         guard !hasStarted else { return }
         hasStarted = true
+        invalidateOngoingAnalysis()
+        let startGeneration = analysisGeneration
 
         do {
             let accessGranted = try await service.prepareSession()
+            guard isCurrentStart(startGeneration) else { return }
             if accessGranted {
                 state = .ready
                 message = "Camera ready"
@@ -117,12 +121,14 @@ final class CameraViewModel: ObservableObject {
                 )
             }
         } catch {
+            guard isCurrentStart(startGeneration) else { return }
             state = .unavailable
             message = error.localizedDescription
         }
     }
 
     func stop() {
+        invalidateOngoingAnalysis()
         service.stopRunning()
         guidanceTask?.cancel()
         guidanceTask = nil
@@ -130,11 +136,13 @@ final class CameraViewModel: ObservableObject {
         liveTextTask = nil
         audioService.stop()
         hasStarted = false
+        isCapturing = false
         resetLiveTextState()
     }
 
     func selectMode(_ newMode: CameraMode) {
-        guard mode != newMode, state == .ready else { return }
+        guard mode != newMode, state == .ready, !isCapturing else { return }
+        invalidateOngoingAnalysis()
         mode = newMode
         audioService.stop()
         resetLiveTextState()
@@ -159,24 +167,30 @@ final class CameraViewModel: ObservableObject {
 
     func capture() async {
         guard canCaptureForMoreDetail else { return }
+        invalidateOngoingAnalysis()
+        let captureGeneration = analysisGeneration
         isCapturing = true
         captureError = nil
         audioService.stop()
 
+        defer {
+            if analysisGeneration == captureGeneration {
+                isCapturing = false
+            }
+        }
+
         do {
             let imageData = try await service.capturePhoto()
-            let detectionTask = Task {
-                try? await APIClient.shared.detect(imageData: imageData)
-            }
-            let textTask = Task { [textRecognitionService] in
-                try? await textRecognitionService.recognizeText(
-                    in: imageData,
-                    level: .accurate
-                )
-            }
+            guard isCurrentCapture(captureGeneration) else { return }
 
-            let detectedResult = await detectionTask.value
-            let textResult = await textTask.value
+            async let detectionAnalysis = try? APIClient.shared.detect(imageData: imageData)
+            async let textAnalysis = try? textRecognitionService.recognizeText(
+                in: imageData,
+                level: .accurate
+            )
+
+            let (detectedResult, textResult) = await (detectionAnalysis, textAnalysis)
+            guard isCurrentCapture(captureGeneration) else { return }
 
             guard detectedResult != nil || textResult?.isEmpty == false else {
                 throw CaptureAnalysisError.analysisUnavailable
@@ -188,35 +202,48 @@ final class CameraViewModel: ObservableObject {
                 confidence: nil,
                 message: "Object detection was unavailable.",
                 hints: nil,
-                recognizedText: nil
+                recognizedText: nil,
+                persistenceWarning: nil
             )
             var combinedResult = baseResult.includingRecognizedText(textResult?.lines ?? [])
 
             if let detectionID = combinedResult.id,
                let textResult,
                !textResult.isEmpty {
-                try? await APIClient.shared.saveRecognizedText(
-                    detectionID: detectionID,
-                    result: textResult
-                )
+                do {
+                    try await APIClient.shared.saveRecognizedText(
+                        detectionID: detectionID,
+                        result: textResult
+                    )
+                } catch {
+                    combinedResult = combinedResult.includingPersistenceWarning(
+                        "The object scan was saved, but its recognized text could not be added to history."
+                    )
+                }
             } else if combinedResult.id == nil,
                       let textResult,
-                      !textResult.isEmpty,
-                      let textCaptureID = try? await APIClient.shared.saveTextCapture(
-                          imageData: imageData,
-                          result: textResult
-                      ) {
-                combinedResult = combinedResult.includingDetectionID(textCaptureID)
+                      !textResult.isEmpty {
+                do {
+                    let textCaptureID = try await APIClient.shared.saveTextCapture(
+                        imageData: imageData,
+                        result: textResult
+                    )
+                    combinedResult = combinedResult.includingDetectionID(textCaptureID)
+                } catch {
+                    combinedResult = combinedResult.includingPersistenceWarning(
+                        "The text was recognized, but this scan could not be saved to history."
+                    )
+                }
             }
 
+            guard isCurrentCapture(captureGeneration) else { return }
             detectionResult = combinedResult
             provideHaptic(.success)
         } catch {
+            guard isCurrentCapture(captureGeneration) else { return }
             captureError = error.localizedDescription
             provideHaptic(.error)
         }
-
-        isCapturing = false
     }
 
     private func startGuidance() {
@@ -249,15 +276,18 @@ final class CameraViewModel: ObservableObject {
               let frame = service.latestGuidanceFrame() else {
             return
         }
+        let generation = analysisGeneration
 
         do {
             let result = try await APIClient.shared.guide(imageData: frame)
+            guard shouldApplyLiveResult(generation, mode: .objects) else { return }
             let instruction = GuidanceInstruction.message(for: result)
             guidanceMessage = instruction
             guidanceObject = result.objectDetected
             isGuidanceAvailable = true
             audioService.speak(instruction)
         } catch {
+            guard shouldApplyLiveResult(generation, mode: .objects) else { return }
             guidanceMessage = "Live object guidance unavailable"
             guidanceObject = nil
             isGuidanceAvailable = false
@@ -270,14 +300,17 @@ final class CameraViewModel: ObservableObject {
               let frame = service.latestGuidanceFrame() else {
             return
         }
+        let generation = analysisGeneration
 
         do {
             let result = try await textRecognitionService.recognizeText(
                 in: frame,
                 level: .fast
             )
+            guard shouldApplyLiveResult(generation, mode: .text) else { return }
             processLiveText(result)
         } catch {
+            guard shouldApplyLiveResult(generation, mode: .text) else { return }
             guidanceMessage = "Live text recognition unavailable"
             liveRecognizedText = nil
             isGuidanceAvailable = false
@@ -304,26 +337,34 @@ final class CameraViewModel: ObservableObject {
 
         consecutiveEmptyTextFrames = 0
         isGuidanceAvailable = true
-        let key = normalizedTextKey(text)
+        let limitedText = String(text.prefix(240))
+        let key = normalizedTextKey(limitedText)
+        guard !key.isEmpty else {
+            guidanceMessage = "Text found. Hold steady."
+            return
+        }
 
-        if key == liveTextCandidateKey {
+        if let candidateKey = liveTextCandidateKey,
+           textSimilarity(key, candidateKey) >= AppConstants.liveTextSimilarityThreshold {
             liveTextCandidateCount += 1
         } else {
             liveTextCandidateKey = key
             liveTextCandidateCount = 1
         }
 
-        guard liveTextCandidateCount >= 2 else {
+        guard liveTextCandidateCount >= AppConstants.liveTextStableFrameCount else {
             guidanceMessage = "Text found. Hold steady."
             return
         }
 
-        let limitedText = String(text.prefix(240))
         liveRecognizedText = limitedText
         guidanceMessage = "Text detected: \(limitedText)"
 
         let now = Date()
-        if key != lastSpokenTextKey || now.timeIntervalSince(lastSpokenTextAt) >= 15 {
+        let matchesLastSpokenText = lastSpokenTextKey.map {
+            textSimilarity(key, $0) >= AppConstants.liveTextSimilarityThreshold
+        } ?? false
+        if !matchesLastSpokenText || now.timeIntervalSince(lastSpokenTextAt) >= 15 {
             audioService.enqueue("Text reads: \(limitedText)")
             lastSpokenTextKey = key
             lastSpokenTextAt = now
@@ -332,9 +373,80 @@ final class CameraViewModel: ObservableObject {
 
     private func normalizedTextKey(_ text: String) -> String {
         text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-            .components(separatedBy: .whitespacesAndNewlines)
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
             .filter { !$0.isEmpty }
             .joined(separator: " ")
+    }
+
+    private func textSimilarity(_ first: String, _ second: String) -> Double {
+        guard first != second else { return 1 }
+        guard min(first.count, second.count) >= 5 else { return 0 }
+
+        let firstCharacters = Array(first)
+        let secondCharacters = Array(second)
+        let editDistance = levenshteinDistance(firstCharacters, secondCharacters)
+        let characterSimilarity = 1 - (
+            Double(editDistance) / Double(max(firstCharacters.count, secondCharacters.count))
+        )
+
+        let firstTokens = Set(first.split(separator: " "))
+        let secondTokens = Set(second.split(separator: " "))
+        let tokenTotal = firstTokens.count + secondTokens.count
+        let tokenSimilarity = tokenTotal == 0
+            ? 0
+            : Double(2 * firstTokens.intersection(secondTokens).count) / Double(tokenTotal)
+
+        return max(characterSimilarity, tokenSimilarity)
+    }
+
+    private func levenshteinDistance(_ first: [Character], _ second: [Character]) -> Int {
+        var previous = Array(0...second.count)
+
+        for (firstIndex, firstCharacter) in first.enumerated() {
+            var current = [firstIndex + 1]
+            current.reserveCapacity(second.count + 1)
+
+            for (secondIndex, secondCharacter) in second.enumerated() {
+                let insertion = current[secondIndex] + 1
+                let deletion = previous[secondIndex + 1] + 1
+                let substitution = previous[secondIndex]
+                    + (firstCharacter == secondCharacter ? 0 : 1)
+                current.append(
+                    min(insertion, min(deletion, substitution))
+                )
+            }
+            previous = current
+        }
+
+        return previous[second.count]
+    }
+
+    private func invalidateOngoingAnalysis() {
+        analysisGeneration &+= 1
+    }
+
+    private func shouldApplyLiveResult(_ generation: UInt, mode expectedMode: CameraMode) -> Bool {
+        analysisGeneration == generation
+            && hasStarted
+            && state == .ready
+            && mode == expectedMode
+            && !isCapturing
+            && !Task.isCancelled
+    }
+
+    private func isCurrentStart(_ generation: UInt) -> Bool {
+        analysisGeneration == generation
+            && hasStarted
+            && !Task.isCancelled
+    }
+
+    private func isCurrentCapture(_ generation: UInt) -> Bool {
+        analysisGeneration == generation
+            && hasStarted
+            && state == .ready
+            && isCapturing
+            && !Task.isCancelled
     }
 
     private func resetLiveTextState() {
