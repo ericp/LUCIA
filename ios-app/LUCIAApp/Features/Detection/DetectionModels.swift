@@ -7,6 +7,7 @@ struct DetectionResult: Codable, Identifiable, Hashable {
     let message: String
     let hints: DetectionHints?
     let recognizedText: [RecognizedTextLine]?
+    let persistenceWarning: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -15,6 +16,7 @@ struct DetectionResult: Codable, Identifiable, Hashable {
         case message
         case hints
         case recognizedText = "recognized_text"
+        case persistenceWarning
     }
 
     var displayLabel: String {
@@ -56,6 +58,9 @@ struct DetectionResult: Codable, Identifiable, Hashable {
         } else if objectDetected == nil {
             parts.append("No supported object or clear text was detected.")
         }
+        if let persistenceWarning {
+            parts.append(persistenceWarning)
+        }
         return parts.joined(separator: " ")
     }
 
@@ -66,7 +71,8 @@ struct DetectionResult: Codable, Identifiable, Hashable {
             confidence: confidence,
             message: message,
             hints: hints,
-            recognizedText: lines
+            recognizedText: lines,
+            persistenceWarning: persistenceWarning
         )
     }
 
@@ -77,7 +83,20 @@ struct DetectionResult: Codable, Identifiable, Hashable {
             confidence: confidence,
             message: message,
             hints: hints,
-            recognizedText: recognizedText
+            recognizedText: recognizedText,
+            persistenceWarning: persistenceWarning
+        )
+    }
+
+    func includingPersistenceWarning(_ warning: String) -> DetectionResult {
+        DetectionResult(
+            id: id,
+            objectDetected: objectDetected,
+            confidence: confidence,
+            message: message,
+            hints: hints,
+            recognizedText: recognizedText,
+            persistenceWarning: warning
         )
     }
 }
