@@ -1,6 +1,11 @@
 import Combine
 import Foundation
 
+enum CaptureType: String, Codable, Hashable {
+    case object
+    case text
+}
+
 struct ScannedObject: Identifiable, Hashable {
     let id: Int
     let name: String
@@ -8,6 +13,8 @@ struct ScannedObject: Identifiable, Hashable {
     let details: String?
     let scannedAt: Date
     let thumbnailURL: URL?
+    let captureType: CaptureType
+    let recognizedTextLines: [RecognizedTextLine]
 }
 
 struct ScannedObjectResponse: Decodable {
@@ -17,6 +24,8 @@ struct ScannedObjectResponse: Decodable {
     let details: String?
     let scannedAt: Date
     let imageURL: String?
+    let captureType: CaptureType?
+    let recognizedTextLines: [RecognizedTextLine]?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -25,6 +34,8 @@ struct ScannedObjectResponse: Decodable {
         case details
         case scannedAt = "scanned_at"
         case imageURL = "image_url"
+        case captureType = "capture_type"
+        case recognizedTextLines = "recognized_text_lines"
     }
 
     func scannedObject(baseURL: URL) -> ScannedObject {
@@ -37,7 +48,9 @@ struct ScannedObjectResponse: Decodable {
             confidence: confidence,
             details: details,
             scannedAt: scannedAt,
-            thumbnailURL: thumbnailURL
+            thumbnailURL: thumbnailURL,
+            captureType: captureType ?? (label.lowercased() == "visible text" ? .text : .object),
+            recognizedTextLines: recognizedTextLines ?? []
         )
     }
 }

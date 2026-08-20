@@ -2,7 +2,18 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 
-from sqlalchemy import Column, DateTime, Float, Integer, String, Text, create_engine, inspect, text
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    create_engine,
+    inspect,
+    text,
+)
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 
@@ -31,6 +42,32 @@ class Detection(Base):
     scanned_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
     recognized_text = Column(Text, nullable=True)
     text_confidence = Column(Float, nullable=True)
+    capture_type = Column(
+        String,
+        nullable=False,
+        default="object",
+        server_default="object",
+        index=True,
+    )
+
+
+class RecognizedTextLineRecord(Base):
+    __tablename__ = "recognized_text_lines"
+
+    id = Column(Integer, primary_key=True, index=True)
+    detection_id = Column(
+        Integer,
+        ForeignKey("detections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    position = Column(Integer, nullable=False)
+    text = Column(Text, nullable=False)
+    confidence = Column(Float, nullable=False)
+    bounding_box_x = Column(Float, nullable=False)
+    bounding_box_y = Column(Float, nullable=False)
+    bounding_box_width = Column(Float, nullable=False)
+    bounding_box_height = Column(Float, nullable=False)
 
 
 class UserLabel(Base):
@@ -44,7 +81,12 @@ class UserLabel(Base):
 def _migrate_existing_database() -> None:
     """Add new detection metadata without deleting existing records."""
     columns = {column["name"] for column in inspect(engine).get_columns("detections")}
-    missing_columns = {"scanned_at", "recognized_text", "text_confidence"} - columns
+    missing_columns = {
+        "scanned_at",
+        "recognized_text",
+        "text_confidence",
+        "capture_type",
+    } - columns
     if not missing_columns:
         return
 
@@ -82,6 +124,26 @@ def _migrate_existing_database() -> None:
 
         if "text_confidence" in missing_columns:
             connection.execute(text("ALTER TABLE detections ADD COLUMN text_confidence FLOAT"))
+
+        if "capture_type" in missing_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE detections ADD COLUMN capture_type "
+                    "VARCHAR NOT NULL DEFAULT 'object'"
+                )
+            )
+            connection.execute(
+                text(
+                    "UPDATE detections SET capture_type = 'text' "
+                    "WHERE lower(label) = 'visible text'"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_detections_capture_type "
+                    "ON detections (capture_type)"
+                )
+            )
 
 
 Base.metadata.create_all(bind=engine)
