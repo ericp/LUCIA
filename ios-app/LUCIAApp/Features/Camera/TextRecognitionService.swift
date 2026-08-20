@@ -7,9 +7,24 @@ enum TextRecognitionLevel {
     case accurate
 }
 
+struct RecognizedTextBoundingBox: Codable, Hashable {
+    // Apple Vision unit coordinates: origin is at the image's bottom-left.
+    let x: Double
+    let y: Double
+    let width: Double
+    let height: Double
+}
+
 struct RecognizedTextLine: Codable, Hashable {
     let text: String
     let confidence: Double
+    let boundingBox: RecognizedTextBoundingBox
+
+    enum CodingKeys: String, CodingKey {
+        case text
+        case confidence
+        case boundingBox = "bounding_box"
+    }
 }
 
 struct TextRecognitionResult: Hashable {
@@ -75,7 +90,13 @@ final class TextRecognitionService {
                 guard !text.isEmpty else { return nil }
                 return RecognizedTextLine(
                     text: text,
-                    confidence: Double(candidate.confidence)
+                    confidence: Double(candidate.confidence),
+                    boundingBox: RecognizedTextBoundingBox(
+                        x: Double(observation.boundingBox.minX),
+                        y: Double(observation.boundingBox.minY),
+                        width: Double(observation.boundingBox.width),
+                        height: Double(observation.boundingBox.height)
+                    )
                 )
             }
 

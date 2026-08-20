@@ -35,7 +35,8 @@ final class APIClient {
         request.httpBody = try JSONEncoder().encode(
             TextUpdateRequest(
                 recognizedText: result.combinedText,
-                confidence: result.averageConfidence
+                confidence: result.averageConfidence,
+                recognizedLines: result.lines
             )
         )
         request.timeoutInterval = 15
@@ -58,10 +59,15 @@ final class APIClient {
         var request = URLRequest(url: baseURL.appendingPathComponent("text-captures"))
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        let recognizedLinesData = try JSONEncoder().encode(result.lines)
+        guard let recognizedLinesJSON = String(data: recognizedLinesData, encoding: .utf8) else {
+            throw APIError.invalidPayload
+        }
         request.httpBody = MultipartFormData.textCapture(
             imageData,
             recognizedText: result.combinedText,
             confidence: result.averageConfidence,
+            recognizedLinesJSON: recognizedLinesJSON,
             boundary: boundary
         )
         request.timeoutInterval = 30
@@ -138,10 +144,12 @@ final class APIClient {
 private struct TextUpdateRequest: Encodable {
     let recognizedText: String
     let confidence: Double?
+    let recognizedLines: [RecognizedTextLine]
 
     enum CodingKeys: String, CodingKey {
         case recognizedText = "recognized_text"
         case confidence
+        case recognizedLines = "recognized_lines"
     }
 }
 
@@ -178,6 +186,7 @@ private enum MultipartFormData {
         _ data: Data,
         recognizedText: String,
         confidence: Double?,
+        recognizedLinesJSON: String,
         boundary: String
     ) -> Data {
         var body = Data()
@@ -192,6 +201,11 @@ private enum MultipartFormData {
             body.append(String(confidence))
             body.append("\r\n")
         }
+
+        body.append("--\(boundary)\r\n")
+        body.append("Content-Disposition: form-data; name=\"recognized_lines\"\r\n\r\n")
+        body.append(recognizedLinesJSON)
+        body.append("\r\n")
 
         body.append("--\(boundary)\r\n")
         body.append("Content-Disposition: form-data; name=\"file\"; filename=\"capture.jpg\"\r\n")
