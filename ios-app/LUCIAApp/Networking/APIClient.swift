@@ -112,6 +112,47 @@ final class APIClient {
         }
     }
 
+    func fetchDetectionPage(
+        cursor: String? = nil,
+        limit: Int = 20
+    ) async throws -> ScannedObjectPage {
+        let baseURL = baseURLOverride ?? AppSettingsStore.apiBaseURL
+        let pageURL = baseURL
+            .appendingPathComponent("detections")
+            .appendingPathComponent("page")
+        guard var components = URLComponents(url: pageURL, resolvingAgainstBaseURL: false) else {
+            throw APIError.invalidResponse
+        }
+        var queryItems = [URLQueryItem(name: "limit", value: String(limit))]
+        if let cursor {
+            queryItems.append(URLQueryItem(name: "cursor", value: cursor))
+        }
+        components.queryItems = queryItems
+        guard let url = components.url else { throw APIError.invalidResponse }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 15
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw APIError.server(statusCode: httpResponse.statusCode)
+        }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        do {
+            return try decoder
+                .decode(ScannedObjectPageResponse.self, from: data)
+                .scannedObjectPage(baseURL: baseURL)
+        } catch {
+            throw APIError.invalidPayload
+        }
+    }
+
     private func upload<Response: Decodable>(
         imageData: Data,
         path: String,

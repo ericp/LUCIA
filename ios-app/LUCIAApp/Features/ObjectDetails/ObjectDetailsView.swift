@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ObjectDetailsView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @StateObject private var viewModel: ObjectDetailsViewModel
     @StateObject private var audioService = GuidanceAudioService()
     @State private var hasAnnouncedResults = false
@@ -165,6 +166,8 @@ struct ObjectDetailsView: View {
                         }
                     }
                 }
+
+                historyFooter
             }
             .padding(.vertical, 4)
         }
@@ -175,18 +178,12 @@ struct ObjectDetailsView: View {
     }
 
     private func objectRow(_ object: ScannedObject) -> some View {
-        HStack(spacing: 14) {
-            AsyncImage(url: object.thumbnailURL) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
-                ZStack {
-                    Color.black.opacity(0.06)
-                    Image(systemName: "photo")
-                        .foregroundStyle(.gray)
-                }
-            }
-            .frame(width: 68, height: 68)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        let rowLayout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 14))
+
+        return rowLayout {
+            objectThumbnail(object)
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(object.name.capitalized)
@@ -196,14 +193,17 @@ struct ObjectDetailsView: View {
                 Text(detailText(for: object))
                     .font(.subheadline)
                     .foregroundStyle(.gray)
-                    .lineLimit(2)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     .truncationMode(.tail)
             }
 
-            Spacer(minLength: 4)
-            Image(systemName: "chevron.right")
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(.gray)
+            if !dynamicTypeSize.isAccessibilitySize {
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.gray)
+                    .accessibilityHidden(true)
+            }
         }
         .padding(12)
         .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -213,6 +213,49 @@ struct ObjectDetailsView: View {
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(object.name). \(detailText(for: object))")
+        .task {
+            await viewModel.loadMoreIfNeeded(currentItem: object)
+        }
+    }
+
+    private func objectThumbnail(_ object: ScannedObject) -> some View {
+        AsyncImage(url: object.thumbnailURL) { image in
+            image.resizable().scaledToFill()
+        } placeholder: {
+            ZStack {
+                Color.black.opacity(0.06)
+                Image(systemName: "photo")
+                    .foregroundStyle(.gray)
+            }
+        }
+        .frame(width: 68, height: 68)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var historyFooter: some View {
+        if viewModel.isLoadingMore {
+            HStack(spacing: 10) {
+                ProgressView()
+                Text("Loading more scans…")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
+            .accessibilityElement(children: .combine)
+        } else if viewModel.paginationErrorMessage != nil {
+            Button {
+                Task { await viewModel.retryLoadingMore() }
+            } label: {
+                Label("Couldn’t load more. Try again", systemImage: "arrow.clockwise")
+                    .font(.headline.weight(.bold))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+            }
+            .foregroundStyle(.black)
+            .accessibilityHint("Retries loading older scanned objects")
+        }
     }
 
     private var spokenInstruction: String {
