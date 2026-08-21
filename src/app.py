@@ -1,10 +1,12 @@
 # LUCIA src.app:app --reload
 from datetime import datetime, timezone
+import base64
+import binascii
 import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -14,6 +16,7 @@ import numpy as np
 import os
 import shutil
 import uuid
+from sqlalchemy import and_, or_
 
 # Import detection logic, text-to-speech, and database models
 from src.detect import detect_objects_in_frame
@@ -76,9 +79,13 @@ IMAGES_DIR = Path(
 CORRECTED_IMAGES_DIR = Path(
     os.environ.get("LUCIA_CORRECTED_IMAGES_DIR", PROJECT_ROOT / "data" / "user_labels")
 ).expanduser().resolve()
+THUMBNAILS_DIR = Path(
+    os.environ.get("LUCIA_THUMBNAILS_DIR", PROJECT_ROOT / "data" / "thumbnails")
+).expanduser().resolve()
 
 IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 CORRECTED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+THUMBNAILS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # POST /detect
@@ -213,7 +220,7 @@ async def save_text_capture(
 
 @app.get("/detections")
 def list_detections():
-    """Return saved scans newest-first for the iOS scanned-objects screen."""
+    """Return all saved scans for older clients that do not support pagination."""
     session = SessionLocal()
     try:
         detections = (
@@ -221,51 +228,56 @@ def list_detections():
             .order_by(Detection.scanned_at.desc(), Detection.id.desc())
             .all()
         )
-        corrected_labels = {}
-        for correction in session.query(UserLabel).order_by(UserLabel.id.asc()).all():
-            corrected_labels[correction.detection_id] = correction.label
+        return _history_payloads(session, detections)
+    finally:
+        session.close()
 
-        recognized_lines_by_detection: Dict[int, List[RecognizedTextLineRecord]] = {}
-        for line in (
-            session.query(RecognizedTextLineRecord)
-            .order_by(
-                RecognizedTextLineRecord.detection_id.asc(),
-                RecognizedTextLineRecord.position.asc(),
+
+@app.get("/detections/page")
+def paginated_detections(
+    limit: int = Query(20, ge=1, le=100),
+    cursor: Optional[str] = Query(None),
+):
+    """Return one newest-first history page using an opaque keyset cursor."""
+    cursor_values = _decode_history_cursor(cursor) if cursor else None
+    session = SessionLocal()
+    try:
+        query = session.query(Detection).filter(
+            Detection.filename.isnot(None),
+            Detection.filename != "",
+        )
+        if cursor_values is not None:
+            cursor_date, cursor_id = cursor_values
+            query = query.filter(
+                or_(
+                    Detection.scanned_at < cursor_date,
+                    and_(
+                        Detection.scanned_at == cursor_date,
+                        Detection.id < cursor_id,
+                    ),
+                )
             )
+
+        rows = (
+            query.order_by(Detection.scanned_at.desc(), Detection.id.desc())
+            .limit(limit + 1)
             .all()
-        ):
-            recognized_lines_by_detection.setdefault(line.detection_id, []).append(line)
-
-        response = []
-        for detection in detections:
-            corrected_label = corrected_labels.get(detection.id)
-            scanned_at = detection.scanned_at or datetime.now(timezone.utc)
-            if scanned_at.tzinfo is None:
-                scanned_at = scanned_at.replace(tzinfo=timezone.utc)
-
-            image_path = _image_path_for(detection)
-            if image_path is None:
-                continue
-            response.append(
-                {
-                    "id": detection.id,
-                    "label": corrected_label or detection.label,
-                    "original_label": detection.label,
-                    "corrected_label": corrected_label,
-                    "confidence": detection.confidence,
-                    "scanned_at": scanned_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    "image_url": f"/detections/{detection.id}/image",
-                    "details": detection.recognized_text,
-                    "recognized_text": detection.recognized_text,
-                    "text_confidence": detection.text_confidence,
-                    "capture_type": detection.capture_type,
-                    "recognized_text_lines": [
-                        _serialize_recognized_line(line)
-                        for line in recognized_lines_by_detection.get(detection.id, [])
-                    ],
-                }
-            )
-        return response
+        )
+        has_more = len(rows) > limit
+        page_rows = rows[:limit]
+        next_cursor = (
+            _encode_history_cursor(page_rows[-1])
+            if has_more and page_rows
+            else None
+        )
+        return {
+            "items": _history_payloads(
+                session,
+                page_rows,
+                include_missing_images=True,
+            ),
+            "next_cursor": next_cursor,
+        }
     finally:
         session.close()
 
@@ -286,6 +298,33 @@ def detection_image(detection_id: int):
             raise HTTPException(status_code=404, detail="Detection image not found")
 
         return FileResponse(image_path, media_type="image/jpeg", filename=image_path.name)
+    finally:
+        session.close()
+
+
+@app.get("/detections/{detection_id}/thumbnail")
+def detection_thumbnail(detection_id: int):
+    """Create and cache a bandwidth-efficient history thumbnail on first use."""
+    session = SessionLocal()
+    try:
+        detection = (
+            session.query(Detection).filter(Detection.id == detection_id).first()
+        )
+        if not detection:
+            raise HTTPException(status_code=404, detail="Detection not found")
+
+        image_path = _image_path_for(detection)
+        if image_path is None:
+            raise HTTPException(status_code=404, detail="Detection image not found")
+
+        thumbnail_path = THUMBNAILS_DIR / f"{detection.id:03d}.jpg"
+        if not thumbnail_path.is_file():
+            _create_thumbnail(image_path, thumbnail_path)
+        return FileResponse(
+            thumbnail_path,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
     finally:
         session.close()
 
@@ -427,6 +466,140 @@ def _serialize_recognized_line(line) -> dict:
             ),
         },
     }
+
+
+def _history_payloads(
+    session,
+    detections: List[Detection],
+    include_missing_images: bool = False,
+) -> List[dict]:
+    if not detections:
+        return []
+
+    detection_ids = [detection.id for detection in detections]
+    corrected_labels = {}
+    for correction in (
+        session.query(UserLabel)
+        .filter(UserLabel.detection_id.in_(detection_ids))
+        .order_by(UserLabel.id.asc())
+        .all()
+    ):
+        corrected_labels[correction.detection_id] = correction.label
+
+    recognized_lines_by_detection: Dict[int, List[RecognizedTextLineRecord]] = {}
+    for line in (
+        session.query(RecognizedTextLineRecord)
+        .filter(RecognizedTextLineRecord.detection_id.in_(detection_ids))
+        .order_by(
+            RecognizedTextLineRecord.detection_id.asc(),
+            RecognizedTextLineRecord.position.asc(),
+        )
+        .all()
+    ):
+        recognized_lines_by_detection.setdefault(line.detection_id, []).append(line)
+
+    payloads = []
+    for detection in detections:
+        if not include_missing_images and _image_path_for(detection) is None:
+            continue
+
+        corrected_label = corrected_labels.get(detection.id)
+        scanned_at = detection.scanned_at or datetime.now(timezone.utc)
+        if scanned_at.tzinfo is None:
+            scanned_at = scanned_at.replace(tzinfo=timezone.utc)
+        else:
+            scanned_at = scanned_at.astimezone(timezone.utc)
+
+        payloads.append(
+            {
+                "id": detection.id,
+                "label": corrected_label or detection.label,
+                "original_label": detection.label,
+                "corrected_label": corrected_label,
+                "confidence": detection.confidence,
+                "scanned_at": scanned_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "image_url": f"/detections/{detection.id}/image",
+                "thumbnail_url": f"/detections/{detection.id}/thumbnail",
+                "details": detection.recognized_text,
+                "recognized_text": detection.recognized_text,
+                "text_confidence": detection.text_confidence,
+                "capture_type": detection.capture_type,
+                "recognized_text_lines": [
+                    _serialize_recognized_line(line)
+                    for line in recognized_lines_by_detection.get(detection.id, [])
+                ],
+            }
+        )
+    return payloads
+
+
+def _encode_history_cursor(detection: Detection) -> str:
+    scanned_at = detection.scanned_at or datetime.min
+    if scanned_at.tzinfo is not None:
+        scanned_at = scanned_at.astimezone(timezone.utc).replace(tzinfo=None)
+    payload = json.dumps(
+        {"scanned_at": scanned_at.isoformat(timespec="microseconds"), "id": detection.id},
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+
+
+def _decode_history_cursor(cursor: str):
+    try:
+        padding = "=" * (-len(cursor) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(cursor + padding))
+        scanned_at = datetime.fromisoformat(payload["scanned_at"])
+        detection_id = int(payload["id"])
+        if detection_id < 1:
+            raise ValueError("invalid detection id")
+        if scanned_at.tzinfo is not None:
+            scanned_at = scanned_at.astimezone(timezone.utc).replace(tzinfo=None)
+        return scanned_at, detection_id
+    except (
+        binascii.Error,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        KeyError,
+        TypeError,
+        ValueError,
+    ) as error:
+        raise HTTPException(status_code=422, detail="History cursor is invalid") from error
+
+
+def _create_thumbnail(source_path: Path, destination_path: Path) -> None:
+    image = cv2.imread(str(source_path), cv2.IMREAD_COLOR)
+    if image is None:
+        raise HTTPException(status_code=500, detail="Detection thumbnail could not be created")
+
+    height, width = image.shape[:2]
+    largest_dimension = max(height, width)
+    if largest_dimension > 256:
+        scale = 256 / largest_dimension
+        image = cv2.resize(
+            image,
+            (max(1, round(width * scale)), max(1, round(height * scale))),
+            interpolation=cv2.INTER_AREA,
+        )
+
+    encoded, thumbnail_data = cv2.imencode(
+        ".jpg",
+        image,
+        [cv2.IMWRITE_JPEG_QUALITY, 80],
+    )
+    if not encoded:
+        raise HTTPException(status_code=500, detail="Detection thumbnail could not be created")
+
+    temporary_path = destination_path.with_name(
+        f".{destination_path.name}.{uuid.uuid4().hex}.tmp"
+    )
+    try:
+        with temporary_path.open("xb") as thumbnail_file:
+            thumbnail_file.write(thumbnail_data.tobytes())
+            thumbnail_file.flush()
+            os.fsync(thumbnail_file.fileno())
+        os.replace(temporary_path, destination_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
 
 
 def _add_recognized_lines(
